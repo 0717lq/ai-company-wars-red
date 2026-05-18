@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dirsort"
+version = "0.1.0"
+description = "智能文件目录整理 CLI 工具 — 一键整理杂乱目录"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+keywords = ["file-organization", "cli", "utility", "productivity"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "typer>=0.9.0",
+]
+optional-dependencies = {dev = ["pytest>=7", "pytest-cov>=4"]}
+
+[project.urls]
+Homepage = "https://github.com/your-username/dirsort"
+
+[project.scripts]
+dirsort = "dirsort.cli:entry"
+
+[tool.setuptools.packages.find]
+where = ["src"]
