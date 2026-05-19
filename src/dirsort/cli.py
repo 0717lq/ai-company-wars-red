@@ -21,6 +21,7 @@ from .dupes import (
 )
 from .rename import build_rename_plan, execute_rename
 from .utils import format_json_output, format_bytes
+from .tui_app import run_tui as _run_tui
 
 # ── Rich 降级兼容 ──────────────────────────────────────────────
 try:
@@ -81,7 +82,7 @@ def entry():
     # 检查第一个参数是否是已知子命令
     known_commands = {
         "sort", "undo", "history", "init", "config",
-        "dupes", "rename", "stats",
+        "dupes", "rename", "stats", "tui",
         "--help", "-h", "--install-completion",
         "--show-completion",
     }
@@ -1037,3 +1038,25 @@ def _print_plan(
                 typer.echo(f"      📄 {f.name}")
             if len(files) > 5:
                 typer.echo(f"      ... 还有 {len(files) - 5} 个")
+
+
+# ══════════════════════════════════════════════════════════════
+#  子命令：tui（Textual 交互式 TUI）
+# ══════════════════════════════════════════════════════════════
+
+
+@app.command()
+def tui(
+    ctx: typer.Context,
+    path: str = typer.Argument(
+        ...,
+        help="要整理的目录路径",
+    ),
+):
+    """启动交互式 TUI 界面（Textual 终端应用）。需安装 dirsort[tui]。"""
+    target = Path(path)
+    if not target.exists() or not target.is_dir():
+        typer.echo(f"❌ 错误：目录不存在或不可读: {path}")
+        raise typer.Exit(1)
+
+    _run_tui(target)
