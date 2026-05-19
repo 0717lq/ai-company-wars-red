@@ -4,7 +4,6 @@ from datetime import datetime
 from pathlib import Path
 
 UNDO_DIR = Path.home() / ".dirsort"
-HISTORY_FILE = UNDO_DIR / "history.json"
 
 
 class UndoManager:
@@ -14,18 +13,21 @@ class UndoManager:
         self.undo_dir = undo_dir or UNDO_DIR
         self.undo_dir.mkdir(parents=True, exist_ok=True)
 
-    def record(self, source_dir: Path, moves: list[tuple[Path, Path]]):
-        """记录一次整理操作。
+    def record(self, source_dir: Path, moves: list[tuple[Path, Path]],
+               operation_type: str = "sort"):
+        """记录一次操作。
 
         Args:
-            source_dir: 被整理的目录
-            moves: [(原路径, 新路径)] 列表（原路径 = 移动前的位置）
+            source_dir: 操作的目录
+            moves: [(原路径, 新路径)] 列表
+            operation_type: 操作类型（"sort", "rename", "dupes_delete" 等）
         """
         records = self._load_history()
 
         entry = {
             "timestamp": datetime.now().isoformat(),
             "source_dir": str(source_dir),
+            "operation_type": operation_type,
             "moves": [
                 {"from": str(src), "to": str(dst)} for src, dst in moves
             ],
@@ -38,11 +40,13 @@ class UndoManager:
 
         self._save_history(records)
 
-    def rollback(self, source_dir: Path | None = None) -> int:
-        """回滚整理操作。
+    def rollback(self, source_dir: Path | None = None,
+                 operation_type: str | None = None) -> int:
+        """回滚操作。
 
         Args:
             source_dir: 指定要回滚的目录，None 则回滚最近一次
+            operation_type: 指定要回滚的操作类型（None 为所有类型）
 
         Returns:
             回滚的文件数量
@@ -52,16 +56,28 @@ class UndoManager:
             return 0
 
         if source_dir is None:
-            # 回滚最近一次
-            target = records.pop()
+            # 回滚最近一次匹配的操作
+            if operation_type is None:
+                target = records.pop()
+            else:
+                idx = -1
+                for i in range(len(records) - 1, -1, -1):
+                    if records[i].get("operation_type") == operation_type:
+                        idx = i
+                        break
+                if idx == -1:
+                    return 0
+                target = records.pop(idx)
         else:
             # 找到指定目录的最近记录
             src_str = str(source_dir)
             idx = -1
             for i in range(len(records) - 1, -1, -1):
-                if records[i]["source_dir"] == src_str:
-                    idx = i
-                    break
+                rec = records[i]
+                if rec["source_dir"] == src_str:
+                    if operation_type is None or rec.get("operation_type") == operation_type:
+                        idx = i
+                        break
             if idx == -1:
                 return 0
             target = records.pop(idx)
@@ -81,7 +97,7 @@ class UndoManager:
         return count
 
     def list_history(self) -> list[dict]:
-        """列出所有整理历史。"""
+        """列出所有操作历史。"""
         return self._load_history()
 
     def _load_history(self) -> list[dict]:
