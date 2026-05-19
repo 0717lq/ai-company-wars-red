@@ -1,0 +1,12 @@
+# dirsort pre-commit hook 配置
+# 用于检查仓库中是否有未整理的临时文件
+
+- id: dirsort-check
+  name: dirsort check — 检查未整理文件
+  description: 检查目录中是否包含需要整理的文件（临时文件、错误位置文件等）
+  entry: dirsort sort
+  language: python
+  files: ''
+  args: ["--dry-run", "--exclude", "*.py", "--exclude", "*.md", "--exclude", "*.yaml", "--exclude", "*.json", "--exclude", "*.toml", "--exclude", "*.yml", "--exclude", "*.txt"]
+  pass_filenames: false
+  always_run: true
