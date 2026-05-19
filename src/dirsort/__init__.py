@@ -5,4 +5,4 @@ dirsort — 智能文件目录整理 CLI 工具。
 支持 YAML 配置规则、富文本输出、安全 Dry-run 模式。
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

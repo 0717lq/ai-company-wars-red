@@ -1,54 +1,73 @@
-# 核心代码说明
+# 核心代码清单 — dirsort v0.3.0
 
 ## cli.py — 命令行入口
 
-| 函数/类 | 作用 |
+| 函数/命令 | 说明 |
+|-----------|------|
+| `entry()` | CLI 入口包装器，使 `dirsort <path>` 等价于 `dirsort sort <path>` |
+| `sort()` | 按类型/日期整理目录文件，默认 dry-run |
+| `undo()` | 回滚上次整理/重命名操作 |
+| `history()` | 查看操作历史记录 |
+| `init()` | 创建默认配置文件 `~/.config/dirsort/rules.yaml` |
+| `config()` | 查看当前配置文件内容 |
+| `dupes()` | 检测重复文件（MD5 哈希，分块读取）|
+| `rename()` | 批量重命名文件（glob 模式 + 序号模板）|
+| `stats()` | 统计目录文件信息（支持 --by-type, --chart）|
+
+## sorter.py — 排序逻辑
+
+| 函数 | 说明 |
+|------|------|
+| `analyze()` | 扫描目录，按规则分类文件 |
+| `organize()` | 执行文件移动操作 |
+| `_resolve_conflict()` | 处理文件名冲突（编号后缀）|
+| `_date_category()` | 按修改时间返回月份分类 |
+
+## rules.py — 分类规则
+
+| 函数 | 说明 |
+|------|------|
+| `classify()` | 根据后缀返回分类名称 |
+| `get_all_categories()` | 获取所有分类名称列表 |
+
+## config.py — 配置系统
+
+| 函数 | 说明 |
+|------|------|
+| `create_default_config()` | 创建默认 YAML 配置文件 |
+| `load_config()` | 加载 YAML 配置文件 |
+| `get_merged_rules()` | 合并自定义 + 默认规则 |
+| `config_content()` | 读取配置文件内容 |
+
+## dupes.py — 重复检测
+
+| 函数/类 | 说明 |
 |---------|------|
-| `entry()` | 入口包装器：`dirsort <path>` → `dirsort sort <path>` |
-| `sort()` | 整理子命令：参数解析 + 调用 sorter + 展示结果 |
-| `undo()` | 回滚子命令：调用 UndoManager + Rich 表格详情 |
-| `history()` | 历史查看：Rich 表格展示历史记录 |
-| `_show_stats()` | 统计输出（Rich 降级兼容） |
-| `_print_plan()` | 整理计划输出（Rich 降级兼容） |
+| `find_duplicates()` | 两遍扫描：先按大小分组，再 MD5 哈希 |
+| `delete_duplicates()` | 删除重复文件（保留每组第一个）|
+| `DuplicateGroup` | 重复文件组，包含哈希值和文件列表 |
+| `_md5_file()` | 分块计算文件 MD5（64KB/块）|
 
-## sorter.py — 核心排序逻辑
+## rename.py — 批量重命名
 
-| 函数/类 | 作用 |
+| 函数/类 | 说明 |
 |---------|------|
-| `analyze()` | 扫描目录 + 分类（支持 exclude/exclude_dirs/custom_rules） |
-| `organize()` | 执行文件移动 + 冲突处理 + 错误跳过 |
-| `_matches_any()` | fnmatch 模式匹配辅助函数 |
-| `_date_category()` | 文件 mtime → "YYYY-MM" 分类名 |
-| `_resolve_conflict()` | 文件冲突自动编号重命名 |
+| `build_rename_plan()` | 构建重命名计划 |
+| `execute_rename()` | 执行重命名操作 |
+| `RenameEntry` | 重命名条目（原路径/新路径）|
 
-## rules.py — 文件分类规则
+## undo.py — 撤销系统
 
-| 函数/类 | 作用 |
+| 函数/类 | 说明 |
 |---------|------|
-| `DEFAULT_RULES` | 默认分类规则（90+ 后缀 → 10+ 类别） |
-| `classify()` | 根据后缀规则分类（支持自定义 rules 参数） |
-| `get_all_categories()` | 获取所有分类名（去重 + "其他"） |
-
-## config.py — 配置文件系统（新增）
-
-| 函数/类 | 作用 |
-|---------|------|
-| `load_config()` | 加载 YAML 配置（自动检测/显式路径） |
-| `get_merged_rules()` | 合并自定义规则 + 默认规则（自定义优先） |
-
-## undo.py — 回滚管理
-
-| 函数/类 | 作用 |
-|---------|------|
-| `UndoManager` | 回滚管理器类 |
-| `UndoManager.record()` | 记录整理操作（最多 20 条） |
-| `UndoManager.rollback()` | 回滚（按目录/最近一次） |
-| `UndoManager.list_history()` | 列出历史记录 |
+| `UndoManager.record()` | 记录操作（支持 operation_type）|
+| `UndoManager.rollback()` | 回滚操作 |
+| `UndoManager.list_history()` | 列出操作历史 |
 
 ## utils.py — 工具函数
 
-| 函数/类 | 作用 |
-|---------|------|
-| `get_size_str()` | 文件大小可读化（B/KB/MB/GB） |
-| `count_files()` | 目录文件计数（非递归） |
-| `get_disk_usage()` | 目录磁盘占用统计 |
+| 函数 | 说明 |
+|------|------|
+| `get_size_str()` | 获取文件可读大小 |
+| `format_bytes()` | 字节数格式化 |
+| `format_json_output()` | JSON 序列化（中文不转义）|

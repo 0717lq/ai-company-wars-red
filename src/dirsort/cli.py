@@ -1,17 +1,33 @@
-"""Typer CLI 定义 — dirsort 命令行入口（Round 2 增强版）"""
+"""Typer CLI 定义 — dirsort 命令行入口（v0.3.0 增强版）。"""
 from pathlib import Path
 
 import typer
 
 from .sorter import analyze, organize
 from .undo import UndoManager
-from .config import load_config, get_merged_rules
+from .config import (
+    load_config,
+    get_merged_rules,
+    create_default_config,
+    config_content,
+    DEFAULT_CONFIG_DIR,
+    DEFAULT_CONFIG_FILE,
+)
+from fnmatch import fnmatch
+
+from .dupes import (
+    find_duplicates,
+    delete_duplicates,
+)
+from .rename import build_rename_plan, execute_rename
+from .utils import format_json_output, format_bytes
 
 # ── Rich 降级兼容 ──────────────────────────────────────────────
 try:
     from rich.console import Console
     from rich.table import Table
     from rich import box
+    from rich.progress import track
 
     HAS_RICH = True
 except ImportError:
@@ -20,12 +36,42 @@ except ImportError:
     Console = object  # type: ignore
     Table = object  # type: ignore
     box = object  # type: ignore
+    track = None  # type: ignore
 
-app = typer.Typer(
-    name="dirsort",
-    help="智能文件目录整理工具 — 按类型或日期一键整理杂乱目录",
-    add_completion=False,
-)
+
+# ── 全局 --json 上下文 ─────────────────────────────────────────
+
+
+def _is_json(ctx: typer.Context) -> bool:
+    """检查是否启用了 JSON 输出模式。"""
+    return ctx.obj and ctx.obj.get("json", False)
+
+
+# ── Typer 应用 ─────────────────────────────────────────────────
+
+
+def make_app() -> typer.Typer:
+    """创建 Typer 应用实例。"""
+    return typer.Typer(
+        name="dirsort",
+        help="智能文件目录整理工具 — 一键解决杂乱目录的烦恼。",
+        add_completion=True,
+        no_args_is_help=True,
+        context_settings={"help_option_names": ["--help", "-h"]},
+    )
+
+
+app = make_app()
+
+
+@app.callback()
+def main(
+    ctx: typer.Context,
+    json: bool = typer.Option(False, "--json", help="以 JSON 格式输出结果"),
+):
+    """智能文件目录整理工具 — 按类型或日期一键整理杂乱目录。"""
+    ctx.ensure_object(dict)
+    ctx.obj["json"] = json
 
 
 def entry():
@@ -33,15 +79,26 @@ def entry():
     import sys
 
     # 检查第一个参数是否是已知子命令
-    known_commands = {"undo", "history", "--help", "-h"}
+    known_commands = {
+        "sort", "undo", "history", "init", "config",
+        "dupes", "rename", "stats",
+        "--help", "-h", "--install-completion",
+        "--show-completion",
+    }
     if len(sys.argv) > 1 and sys.argv[1] not in known_commands:
         # 将 `dirsort <path>` 转为 `dirsort sort <path>`
         sys.argv.insert(1, "sort")
     app()
 
 
+# ══════════════════════════════════════════════════════════════
+#  子命令：sort
+# ══════════════════════════════════════════════════════════════
+
+
 @app.command()
 def sort(
+    ctx: typer.Context,
     path: str = typer.Argument(
         ...,
         help="要整理的目录路径",
@@ -68,12 +125,12 @@ def sort(
         [],
         "--exclude",
         "-x",
-        help="排除匹配的文件（glob 模式，可多次指定，如 --exclude '*.tmp'）",
+        help="排除匹配的文件（glob 模式，可多次指定）",
     ),
     exclude_dir: list[str] = typer.Option(
         [],
         "--exclude-dir",
-        help="排除匹配的目录（可多次指定，如 --exclude-dir node_modules）",
+        help="排除匹配的目录（可多次指定）",
     ),
     config: str = typer.Option(
         None,
@@ -95,10 +152,11 @@ def sort(
         rules = get_merged_rules(config_path)
 
     # 扫描目录
-    if HAS_RICH:
-        Console().print(f"[bold blue]📂 正在扫描:[/] {target}")
-    else:
-        typer.echo(f"📂 正在扫描: {target}")
+    if not _is_json(ctx):
+        if HAS_RICH:
+            Console().print(f"[bold blue]📂 正在扫描:[/] {target}")
+        else:
+            typer.echo(f"📂 正在扫描: {target}")
 
     try:
         categories = analyze(
@@ -112,62 +170,483 @@ def sort(
         typer.echo(f"❌ 无法读取目录: {e}")
         raise typer.Exit(1)
 
-    # 加载配置信息显示
-    config_info = ""
-    config_path_resolved = config_path or (Path.home() / ".config" / "dirsort" / "rules.yaml")
-    if rules is not None and config_path_resolved.exists():
-        config_info = f"（已加载配置: {config_path_resolved}）"
-
     if stats:
-        _show_stats(categories)
-        if config_info:
-            typer.echo(f"ℹ️  {config_info}")
+        _sort_stats(ctx, categories, rules, config_path)
         return
 
-    # 预览整理计划
-    _print_plan(categories, target, by_date=by_date, config_info=config_info)
+    total = sum(len(files) for files in categories.values())
 
-    # 决定是否执行（默认 dry-run）
-    # --dry-run 向后兼容：显式指定也触发 dry-run
-    # --execute 时真正执行
-    is_dry_run = not execute  # 默认 dry-run，--execute 才执行
-    if is_dry_run:
-        if HAS_RICH:
-            Console().print(
-                "\n[bold yellow]⏸️  Dry-run 模式 — 未执行任何操作。[/]"
-            )
-            Console().print(
-                "[dim]使用 [bold]--execute[/] 标志来真正执行整理。[/]"
-            )
+    if total == 0:
+        if _is_json(ctx):
+            typer.echo(format_json_output({
+                "operation": "sort",
+                "path": str(target),
+                "status": "clean",
+                "message": "目录已经很整洁了，无需整理",
+            }))
+        elif HAS_RICH:
+            Console().print("[bold green]✨ 目录已经很整洁了，无需整理！[/]")
         else:
-            typer.echo(
-                "\n⏸️  Dry-run 模式 — 未执行任何操作。使用 --execute 标志来真正执行。"
-            )
+            typer.echo("✨ 目录已经很整洁了，无需整理！")
         return
+
+    is_dry_run = not execute
+
+    if _is_json(ctx):
+        # JSON 输出
+        plan_data: list[dict] = []
+        for cat, files in sorted(categories.items()):
+            if not files:
+                continue
+            plan_data.append({
+                "category": cat,
+                "count": len(files),
+                "files": [str(f.name) for f in files[:10]],
+            })
+        typer.echo(format_json_output({
+            "operation": "sort",
+            "path": str(target),
+            "status": "dry_run" if is_dry_run else "executed",
+            "total": total,
+            "categories": plan_data,
+        }))
+        if is_dry_run:
+            return
+    else:
+        _print_plan(categories, target, by_date=by_date)
+        if is_dry_run:
+            if HAS_RICH:
+                Console().print(
+                    "\n[bold yellow]⏸️  Dry-run 模式 — 未执行任何操作。[/]"
+                )
+                Console().print("[dim]使用 [bold]--execute[/] 标志来真正执行整理。[/]")
+            else:
+                typer.echo("\n⏸️  Dry-run 模式 — 未执行任何操作。使用 --execute 标志来真正执行。")
+            return
 
     # 执行整理
-    if HAS_RICH:
+    if not _is_json(ctx) and HAS_RICH:
         Console().print("\n[bold green]🔄 正在整理...[/]")
     else:
-        typer.echo("\n🔄 正在整理...")
+        pass
 
     moves = organize(target, categories, by_date=by_date)
-
-    # 记录到 undo 日志
     undo_mgr = UndoManager()
-    undo_mgr.record(target, moves)
+    undo_mgr.record(target, moves, operation_type="sort")
 
+    if not _is_json(ctx):
+        if HAS_RICH:
+            Console().print(f"\n[bold green]✅ 整理完成！移动了 {len(moves)} 个文件。[/]")
+            Console().print("[dim]💡 如需回滚，请执行: [bold]dirsort undo[/][/]")
+        else:
+            typer.echo(f"\n✅ 整理完成！移动了 {len(moves)} 个文件。")
+            typer.echo("💡 如需回滚，请执行: dirsort undo")
+
+
+# ══════════════════════════════════════════════════════════════
+#  子命令：init（新建配置）
+# ══════════════════════════════════════════════════════════════
+
+
+@app.command()
+def init(
+    ctx: typer.Context,
+    global_: bool = typer.Option(
+        False, "--global", help="在用户全局目录创建默认配置文件",
+    ),
+):
+    """创建默认配置文件 ~/.config/dirsort/rules.yaml。"""
+    config_path = create_default_config()
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "init",
+            "path": str(config_path),
+            "status": "created" if config_path.exists() else "exists",
+        }))
+    else:
+        if HAS_RICH:
+            console = Console()
+            console.print(f"[bold green]✅ 已创建配置文件:[/] {config_path}")
+            console.print("[dim]💡 使用 [bold]dirsort config[/] 查看配置内容")
+        else:
+            typer.echo(f"✅ 已创建配置文件: {config_path}")
+            typer.echo("💡 使用 'dirsort config' 查看配置内容")
+
+
+# ══════════════════════════════════════════════════════════════
+#  子命令：config（查看配置）
+# ══════════════════════════════════════════════════════════════
+
+
+@app.command()
+def config(
+    ctx: typer.Context,
+    path: bool = typer.Option(
+        False, "--path", help="显示配置文件路径",
+    ),
+):
+    """查看当前配置文件内容。"""
+    if path:
+        if _is_json(ctx):
+            typer.echo(format_json_output({
+                "operation": "config_path",
+                "path": str(DEFAULT_CONFIG_FILE),
+                "exists": DEFAULT_CONFIG_FILE.exists(),
+            }))
+        else:
+            if HAS_RICH:
+                console = Console()
+                console.print(f"[bold]配置文件路径:[/] {DEFAULT_CONFIG_FILE}")
+            else:
+                typer.echo(f"配置文件路径: {DEFAULT_CONFIG_FILE}")
+        return
+
+    content = config_content()
+    if content is None:
+        if _is_json(ctx):
+            typer.echo(format_json_output({
+                "operation": "config",
+                "status": "not_found",
+                "path": str(DEFAULT_CONFIG_FILE),
+            }))
+        else:
+            if HAS_RICH:
+                console = Console()
+                console.print("[yellow]⚠️  配置文件不存在。[/]")
+                console.print("[dim]使用 [bold]dirsort init[/] 创建默认配置。[/]")
+            else:
+                typer.echo("⚠️  配置文件不存在。")
+                typer.echo("使用 'dirsort init' 创建默认配置。")
+        return
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "config",
+            "status": "found",
+            "path": str(DEFAULT_CONFIG_FILE),
+            "content": content,
+        }))
+    else:
+        if HAS_RICH:
+            console = Console()
+            console.print(f"[bold]📄 {DEFAULT_CONFIG_FILE}[/]\n")
+            console.print(content)
+        else:
+            typer.echo(f"📄 {DEFAULT_CONFIG_FILE}")
+            typer.echo("")
+            typer.echo(content)
+
+
+# ══════════════════════════════════════════════════════════════
+#  子命令：dupes（重复文件检测）
+# ══════════════════════════════════════════════════════════════
+
+
+@app.command()
+def dupes(
+    ctx: typer.Context,
+    path: str = typer.Argument(
+        ...,
+        help="要扫描的目录路径",
+    ),
+    min_size: str = typer.Option(
+        "0", "--min-size", help="最小文件大小（如 1MB, 100KB, 0=不限）",
+    ),
+    delete: bool = typer.Option(
+        False, "--delete", help="删除重复文件（保留每个分组第一个）",
+    ),
+    dry_run: bool = typer.Option(
+        True, "--dry-run", "-n", help="仅预览不删除（默认启用）",
+    ),
+    exclude: list[str] = typer.Option(
+        [], "--exclude", "-x", help="排除匹配的文件（glob 模式）",
+    ),
+    exclude_dir: list[str] = typer.Option(
+        [], "--exclude-dir", help="排除匹配的目录名",
+    ),
+):
+    """检测指定目录中的重复文件（相同 MD5 内容）。"""
+    target = Path(path)
+    if not target.exists() or not target.is_dir():
+        typer.echo(f"❌ 错误：目录不存在或不可读: {path}")
+        raise typer.Exit(1)
+
+    # 解析 --min-size 参数
+    size_bytes = _parse_size(min_size)
+
+    if not _is_json(ctx) and HAS_RICH:
+        Console().print(f"[bold blue]🔍 正在扫描重复文件:[/] {target}")
+
+    groups = find_duplicates(
+        target,
+        min_size=size_bytes,
+        exclude=list(exclude) if exclude else None,
+        exclude_dirs=list(exclude_dir) if exclude_dir else None,
+    )
+
+    if not groups:
+        if _is_json(ctx):
+            typer.echo(format_json_output({
+                "operation": "dupes",
+                "path": str(target),
+                "groups": [],
+                "total_duplicates": 0,
+                "savable_bytes": 0,
+            }))
+        elif HAS_RICH:
+            Console().print("[bold green]✅ 没有找到重复文件！[/]")
+        else:
+            typer.echo("✅ 没有找到重复文件！")
+        return
+
+    total_dupes = sum(len(g.dup_files()) for g in groups)
+    savable_bytes = sum(g.size for g in groups)
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "dupes",
+            "path": str(target),
+            "groups": [g.to_dict() for g in groups],
+            "total_duplicates": total_dupes,
+            "savable_bytes": savable_bytes,
+            "dry_run": not delete,
+        }))
+        if delete:
+            _execute_dupes_delete(groups, ctx)
+        return
+
+    _print_dupes_result(groups, total_dupes, savable_bytes)
+
+    if delete:
+        _execute_dupes_delete(groups, ctx)
+
+
+def _print_dupes_result(
+    groups: list, total_dupes: int, savable_bytes: int,
+):
+    """用 Rich 美化输出重复文件检测结果。"""
     if HAS_RICH:
         console = Console()
-        console.print(f"\n[bold green]✅ 整理完成！移动了 {len(moves)} 个文件。[/]")
-        console.print("[dim]💡 如需回滚，请执行: [bold]dirsort undo[/][/]")
+        # 按重复文件数排序，显示前几组
+        sorted_groups = sorted(groups, key=lambda g: len(g.files), reverse=True)
+        console.print(f"\n[bold red]🔁 发现 {total_dupes} 个重复文件（可节省 {_format_bytes(savable_bytes)}）[/]")
+
+        table = Table(box=box.ROUNDED)
+        table.add_column("分组", style="dim")
+        table.add_column("哈希值（前8位）", style="cyan")
+        table.add_column("大小", style="green", justify="right")
+        table.add_column("重复文件数", style="red", justify="right")
+        table.add_column("保留/删除", style="white")
+
+        for i, g in enumerate(sorted_groups[:15], 1):
+            keep = g.files[0].name
+            dupes_only = [f.name for f in g.files[1:]]
+            h_short = g.file_hash[:8]
+            table.add_row(
+                str(i), h_short,
+                get_size_display(g.size),
+                str(len(g.dup_files())),
+                f"保留: {keep}\n删除: {', '.join(dupes_only[:3])}" +
+                (f" …等{len(dupes_only)-3}个" if len(dupes_only) > 3 else ""),
+            )
+
+        if len(sorted_groups) > 15:
+            console.print(f"[dim]…以及另外 {len(sorted_groups) - 15} 组[/]")
+
+        console.print(table)
+        console.print(f"[dim]💡 使用 [bold]--delete[/] 标志删除重复文件（保留每组第一个）。[/]")
     else:
-        typer.echo(f"\n✅ 整理完成！移动了 {len(moves)} 个文件。")
-        typer.echo("💡 如需回滚，请执行: dirsort undo")
+        typer.echo(f"\n🔁 发现 {total_dupes} 个重复文件（可节省 {_format_bytes(savable_bytes)}）")
+        for i, g in enumerate(groups[:10], 1):
+            typer.echo(f"  {i}. 哈希={g.file_hash[:8]}… ({len(g.files)} 个副本)")
+            for f in g.files[:5]:
+                typer.echo(f"     📄 {f}")
+        typer.echo(f"\n💡 使用 --delete 标志删除重复文件。")
+
+
+def _execute_dupes_delete(groups: list, ctx: typer.Context):
+    """执行重复文件删除并记录到 undo 日志。"""
+    undo_mgr = UndoManager()
+    deleted_files: list[tuple[Path, Path]] = []
+
+    for group in groups:
+        for dup in group.dup_files():
+            # 记录用于 undo（from=当前路径, to=空路径标记删除）
+            deleted_files.append((dup, dup))
+            try:
+                dup.unlink()
+            except (PermissionError, OSError):
+                continue
+
+    if deleted_files:
+        # 记录删除操作到 undo 日志
+        deleted_dirs: set[Path] = set()
+        for src, _ in deleted_files:
+            deleted_dirs.add(src.parent)
+
+        # 为每个目录记录一次
+        for d in deleted_dirs:
+            group_moves = [(src, src) for src, _ in deleted_files if src.parent == d]
+            if group_moves:
+                undo_mgr.record(d, group_moves, operation_type="dupes_delete")
+
+        if not _is_json(ctx):
+            if HAS_RICH:
+                Console().print(
+                    f"\n[bold green]✅ 已删除 {len(deleted_files)} 个重复文件。[/]"
+                )
+                Console().print("[dim]💡 使用 [bold]dirsort undo[/] 无法恢复已删除文件（物理删除）。[/]")
+            else:
+                typer.echo(f"\n✅ 已删除 {len(deleted_files)} 个重复文件。")
+                typer.echo("⚠️  已删除的文件无法通过 undo 恢复。")
+
+
+# ══════════════════════════════════════════════════════════════
+#  子命令：rename（批量重命名）
+# ══════════════════════════════════════════════════════════════
+
+
+@app.command()
+def rename(
+    ctx: typer.Context,
+    path: str = typer.Argument(
+        ...,
+        help="目标目录路径",
+    ),
+    pattern: str = typer.Argument(
+        ...,
+        help="匹配模式（glob 格式，如 \"*.jpg\"）",
+    ),
+    template: str = typer.Argument(
+        ...,
+        help="重命名模板（如 \"photo_%04d\"），%d 替换为序号",
+    ),
+    execute: bool = typer.Option(
+        False, "--execute", "-e",
+        help="实际执行重命名（默认仅预览）",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", "-n",
+        help="仅预览不执行",
+    ),
+    exclude: list[str] = typer.Option(
+        [], "--exclude", "-x", help="排除匹配的文件（glob 模式）",
+    ),
+    exclude_dir: list[str] = typer.Option(
+        [], "--exclude-dir", help="排除匹配的目录名",
+    ),
+):
+    """批量重命名文件。默认只预览不执行。"""
+    target = Path(path)
+    if not target.exists() or not target.is_dir():
+        typer.echo(f"❌ 错误：目录不存在或不可读: {path}")
+        raise typer.Exit(1)
+
+    try:
+        entries = build_rename_plan(
+            target,
+            pattern,
+            template,
+            exclude=list(exclude) if exclude else None,
+            exclude_dirs=list(exclude_dir) if exclude_dir else None,
+        )
+    except ValueError as e:
+        typer.echo(f"❌ 参数错误: {e}")
+        raise typer.Exit(1)
+
+    if not entries:
+        if _is_json(ctx):
+            typer.echo(format_json_output({
+                "operation": "rename",
+                "path": str(target),
+                "pattern": pattern,
+                "template": template,
+                "entries": [],
+                "count": 0,
+            }))
+        else:
+            typer.echo("ℹ️  没有找到匹配的文件。")
+        return
+
+    is_dry_run = not execute
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "rename",
+            "path": str(target),
+            "pattern": pattern,
+            "template": template,
+            "entries": [e.to_dict() for e in entries],
+            "count": len(entries),
+            "dry_run": is_dry_run,
+        }))
+        if not is_dry_run:
+            _execute_rename_and_record(entries, ctx)
+        return
+
+    _print_rename_plan(entries, target, pattern, template)
+
+    if is_dry_run:
+        if HAS_RICH:
+            Console().print("\n[bold yellow]⏸️  预览模式 — 未执行任何操作。[/]")
+            Console().print("[dim]使用 [bold]--execute[/] 标志来真正执行重命名。[/]")
+        else:
+            typer.echo("\n⏸️  预览模式 — 未执行任何操作。使用 --execute 标志来真正执行。")
+        return
+
+    _execute_rename_and_record(entries, ctx)
+
+
+def _print_rename_plan(
+    entries: list, path: Path, pattern: str, template: str,
+):
+    """打印重命名计划。"""
+    if HAS_RICH:
+        console = Console()
+        console.print(f"[bold blue]📋 重命名计划:[/] {path}（模式: {pattern} → {template}）")
+
+        table = Table(box=box.ROUNDED)
+        table.add_column("#", style="dim")
+        table.add_column("原文件名", style="cyan")
+        table.add_column("新文件名", style="green")
+        for i, e in enumerate(entries[:20], 1):
+            table.add_row(str(i), e.src.name, e.dst.name)
+        console.print(table)
+        if len(entries) > 20:
+            console.print(f"[dim]…及另外 {len(entries) - 20} 个文件[/]")
+        console.print(f"[dim]共 {len(entries)} 个文件将被重命名。[/]")
+    else:
+        typer.echo(f"\n📋 重命名计划: {path}（共 {len(entries)} 个文件）")
+        for i, e in enumerate(entries[:10], 1):
+            typer.echo(f"  {i}. {e.src.name} → {e.dst.name}")
+
+
+def _execute_rename_and_record(entries: list, ctx: typer.Context):
+    """执行重命名并记录到 undo 日志。"""
+    executed = execute_rename(entries)
+    if executed:
+        undo_mgr = UndoManager()
+        moves = [(e.src, e.dst) for e in executed]
+        undo_mgr.record(executed[0].src.parent, moves, operation_type="rename")
+
+        if not _is_json(ctx):
+            if HAS_RICH:
+                Console().print(f"\n[bold green]✅ 已重命名 {len(executed)} 个文件。[/]")
+                Console().print("[dim]💡 使用 [bold]dirsort undo[/] 可回滚此操作。[/]")
+            else:
+                typer.echo(f"\n✅ 已重命名 {len(executed)} 个文件。")
+                typer.echo("💡 使用 'dirsort undo' 可回滚此操作。")
+
+
+# ══════════════════════════════════════════════════════════════
+#  子命令：undo（回滚）
+# ══════════════════════════════════════════════════════════════
 
 
 @app.command()
 def undo(
+    ctx: typer.Context,
     path: str = typer.Argument(
         None,
         help="要回滚的目录（留空则回滚最近一次操作）",
@@ -176,96 +655,199 @@ def undo(
         False, "--verbose", "-v", help="显示回滚的详细文件列表"
     ),
 ):
-    """回滚上次整理的移动操作。"""
+    """回滚上次整理/重命名操作。"""
     undo_mgr = UndoManager()
     target = Path(path) if path else None
 
-    # 获取回滚前的历史，用于展示
     history_before = undo_mgr.list_history()
     if not history_before:
-        typer.echo("ℹ️  没有找到可回滚的操作。")
+        if _is_json(ctx):
+            typer.echo(format_json_output({
+                "operation": "undo",
+                "status": "no_history",
+                "files_restored": 0,
+            }))
+        else:
+            typer.echo("ℹ️  没有找到可回滚的操作。")
         return
 
-    # 找到要回滚的条目
-    if target is None:
-        rollback_entry = history_before[-1]
-    else:
-        src_str = str(target)
-        rollback_entry = None
-        for rec in reversed(history_before):
-            if rec["source_dir"] == src_str:
-                rollback_entry = rec
-                break
-        if rollback_entry is None:
-            typer.echo(f"ℹ️  没有找到目录 '{path}' 的回滚记录。")
-            return
-
     count = undo_mgr.rollback(target)
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "undo",
+            "status": "done" if count > 0 else "no_history",
+            "files_restored": count,
+        }))
+        return
 
     if count > 0:
         if HAS_RICH:
             console = Console()
-            # 显示回滚详情
-            table = Table(title="↩️ 回滚详情", box=box.ROUNDED)
-            table.add_column("文件名", style="cyan")
-            table.add_column("从", style="dim")
-            table.add_column("恢复至", style="green")
-            for move in reversed(rollback_entry["moves"]):
-                dst = Path(move["to"])
-                src = Path(move["from"])
-                table.add_row(dst.name, str(dst.parent), str(src.parent))
-            if verbose and rollback_entry:
+            if verbose and history_before:
+                rollback_entry = history_before[-1]
+                table = Table(title="↩️ 回滚详情", box=box.ROUNDED)
+                table.add_column("文件名", style="cyan")
+                table.add_column("操作类型", style="yellow")
+                table.add_column("从", style="dim")
+                table.add_column("恢复至", style="green")
+                for move in reversed(rollback_entry.get("moves", [])):
+                    dst = Path(move["to"])
+                    src = Path(move["from"])
+                    op_type = history_before[-1].get("operation_type", "sort")
+                    table.add_row(dst.name, op_type, str(dst.parent), str(src.parent))
                 console.print(table)
-            console.print(f"\n[bold green]✅ 已回滚 {count} 个文件的移动操作。[/]")
+            console.print(f"\n[bold green]✅ 已回滚 {count} 个文件的操作。[/]")
         else:
-            typer.echo(f"\n✅ 已回滚 {count} 个文件的移动操作。")
-            if verbose and rollback_entry:
+            typer.echo(f"\n✅ 已回滚 {count} 个文件的操作。")
+            if verbose and history_before:
+                rollback_entry = history_before[-1]
                 typer.echo("回滚详情：")
-                for move in reversed(rollback_entry["moves"]):
+                for move in reversed(rollback_entry.get("moves", [])):
                     dst = Path(move["to"])
                     src = Path(move["from"])
                     typer.echo(f"  {dst.name}: {dst.parent} → {src.parent}")
     else:
-        typer.echo("ℹ️  没有找到可回滚的操作。")
+        if _is_json(ctx):
+                    typer.echo(format_json_output({
+                "operation": "undo",
+                "status": "no_history",
+                "files_restored": 0,
+            }))
+        else:
+            typer.echo("ℹ️  没有找到可回滚的操作。")
+
+
+# ══════════════════════════════════════════════════════════════
+#  子命令：history（查看历史）
+# ══════════════════════════════════════════════════════════════
 
 
 @app.command()
-def history():
-    """查看整理历史记录。"""
+def history(
+    ctx: typer.Context,
+):
+    """查看操作历史记录。"""
     undo_mgr = UndoManager()
     records = undo_mgr.list_history()
     if not records:
-        typer.echo("ℹ️  暂无整理历史记录。")
+        if _is_json(ctx):
+            typer.echo(format_json_output({
+                "operation": "history",
+                "records": [],
+            }))
+        else:
+            typer.echo("ℹ️  暂无操作历史记录。")
+        return
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "history",
+            "records": [
+                {
+                    "timestamp": r.get("timestamp", ""),
+                    "source_dir": r.get("source_dir", ""),
+                    "operation_type": r.get("operation_type", "sort"),
+                    "file_count": len(r.get("moves", [])),
+                }
+                for r in records
+            ],
+        }))
         return
 
     if HAS_RICH:
         console = Console()
-        table = Table(title="📋 整理历史", box=box.ROUNDED)
+        table = Table(title="📋 操作历史", box=box.ROUNDED)
         table.add_column("#", style="dim")
         table.add_column("时间", style="cyan")
         table.add_column("目录", style="white")
+        table.add_column("操作类型", style="yellow")
         table.add_column("文件数", style="green", justify="right")
         for i, rec in enumerate(records, 1):
-            ts = rec.get("timestamp", "未知时间")[:19]  # 截断毫秒
+            ts = rec.get("timestamp", "未知时间")[:19]
             p = rec.get("source_dir", "未知目录")
             n = len(rec.get("moves", []))
-            table.add_row(str(i), ts, p, str(n))
+            op_type = rec.get("operation_type", "sort")
+            table.add_row(str(i), ts, p, op_type, str(n))
         console.print(table)
     else:
-        typer.echo("📋 整理历史：")
+        typer.echo("📋 操作历史：")
         for i, rec in enumerate(records, 1):
             ts = rec.get("timestamp", "未知时间")
             p = rec.get("source_dir", "未知目录")
             n = len(rec.get("moves", []))
-            typer.echo(f"  {i}. [{ts}] {p} — {n} 个文件")
+            op_type = rec.get("operation_type", "sort")
+            typer.echo(f"  {i}. [{ts}] ({op_type}) {p} — {n} 个文件")
 
 
-# ── 内部展示函数 ──────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+#  子命令：stats（增强统计）
+# ══════════════════════════════════════════════════════════════
 
 
-def _show_stats(categories: dict):
-    """显示统计信息（支持 Rich 美化输出）。"""
+@app.command()
+def stats(
+    ctx: typer.Context,
+    path: str = typer.Argument(
+        None,
+        help="要统计的目录路径（留空则仅显示全局信息）",
+    ),
+    by_type: bool = typer.Option(
+        False, "--by-type", "--by-extension",
+        help="按扩展名分组显示（而非默认分类）",
+    ),
+    chart: bool = typer.Option(
+        False, "--chart", help="显示条形图",
+    ),
+    exclude: list[str] = typer.Option(
+        [], "--exclude", "-x", help="排除匹配的文件",
+    ),
+    exclude_dir: list[str] = typer.Option(
+        [], "--exclude-dir", help="排除匹配的目录",
+    ),
+):
+    """统计目录中的文件信息，支持按扩展名分组和图表。"""
+    if not path:
+        typer.echo("ℹ️  请指定要统计的目录路径。")
+        typer.echo("示例: dirsort stats ~/Downloads")
+        raise typer.Exit(1)
+
+    target = Path(path)
+    if not target.exists() or not target.is_dir():
+        typer.echo(f"❌ 错误：目录不存在或不可读: {path}")
+        raise typer.Exit(1)
+
+    categories = analyze(
+        target,
+        exclude=list(exclude) if exclude else None,
+        exclude_dirs=list(exclude_dir) if exclude_dir else None,
+    )
+
+    if by_type:
+        _sort_stats_by_type(ctx, target, exclude, exclude_dir)
+    else:
+        _sort_stats(ctx, categories, None, None)
+
+
+def _sort_stats(
+    ctx: typer.Context,
+    categories: dict,
+    rules: dict | None,
+    config_path: Path | None,
+):
+    """显示分类统计信息。"""
     total = sum(len(files) for files in categories.values())
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "stats",
+            "total_files": total,
+            "categories": {
+                cat: len(files) for cat, files in sorted(categories.items())
+                if files
+            },
+        }))
+        return
 
     if HAS_RICH:
         console = Console()
@@ -283,6 +865,134 @@ def _show_stats(categories: dict):
         for cat, files in sorted(categories.items()):
             if files:
                 typer.echo(f"  {cat}: {len(files)} 个文件")
+
+
+def _sort_stats_by_type(
+    ctx: typer.Context,
+    target: Path,
+    exclude: list[str] | None,
+    exclude_dirs: list[str] | None,
+):
+    """按扩展名分组统计。"""
+    from collections import Counter
+    ext_counts: Counter = Counter()
+
+    try:
+        for entry in target.rglob("*"):
+            if not entry.is_file():
+                continue
+            if entry.name.startswith("."):
+                continue
+            if exclude and any(fnmatch_match(entry.name, p) for p in exclude):
+                continue
+            if exclude_dirs and entry.parent.name in exclude_dirs:
+                continue
+            try:
+                ext = entry.suffix.lower() if entry.suffix else "(无扩展名)"
+                ext_counts[ext] += 1
+            except (PermissionError, OSError):
+                continue
+    except (PermissionError, OSError):
+        typer.echo(f"❌ 无法读取目录: {target}")
+        raise typer.Exit(1)
+
+    if not ext_counts:
+        if _is_json(ctx):
+            typer.echo(format_json_output({
+                "operation": "stats_by_type",
+                "extensions": {},
+                "total": 0,
+            }))
+        else:
+            typer.echo("ℹ️  没有找到文件。")
+        return
+
+    total = sum(ext_counts.values())
+    sorted_exts = ext_counts.most_common()
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "stats_by_type",
+            "total": total,
+            "extensions": {ext: count for ext, count in sorted_exts},
+        }))
+        return
+
+    if HAS_RICH:
+        console = Console()
+        table = Table(
+            title=f"📊 按扩展名统计（共 {total} 个文件）",
+            box=box.ROUNDED,
+        )
+        table.add_column("扩展名", style="cyan")
+        table.add_column("文件数", justify="right", style="green")
+        table.add_column("占比", style="dim")
+
+        max_count = sorted_exts[0][1] if sorted_exts else 0
+        for ext, count in sorted_exts[:30]:
+            pct = f"{count / total * 100:.1f}%"
+            bar = _make_bar(count, max_count) if chart else ""
+            label = f"{ext} {bar}" if bar else ext
+            table.add_row(label, str(count), pct)
+
+        if len(sorted_exts) > 30:
+            other = sum(c for _, c in sorted_exts[30:])
+            table.add_row("其他", str(other), f"{other / total * 100:.1f}%")
+
+        console.print(table)
+    else:
+        typer.echo(f"\n📊 按扩展名统计（共 {total} 个文件）：")
+        for ext, count in sorted_exts[:20]:
+            bar = _make_bar(count, sorted_exts[0][1]) if chart else ""
+            typer.echo(f"  {ext}: {count} {bar}")
+
+
+def _make_bar(value: int, max_value: int, width: int = 20) -> str:
+    """生成 ASCII 条形图。"""
+    if max_value == 0:
+        return ""
+    bar_len = int(value / max_value * width)
+    return "█" * bar_len
+
+
+def fnmatch_match(name: str, pattern: str) -> bool:
+    """封装 fnmatch 匹配。"""
+    from fnmatch import fnmatch
+    return fnmatch(name, pattern)
+
+
+# ══════════════════════════════════════════════════════════════
+#  内部辅助函数
+# ══════════════════════════════════════════════════════════════
+
+
+def _parse_size(size_str: str) -> int:
+    """解析大小字符串为字节数。
+
+    支持格式：100, 100KB, 1MB, 1.5GB
+    """
+    size_str = size_str.strip().upper()
+    if not size_str:
+        return 0
+
+    if size_str.endswith("KB"):
+        return int(float(size_str[:-2]) * 1024)
+    elif size_str.endswith("MB"):
+        return int(float(size_str[:-2]) * 1024 * 1024)
+    elif size_str.endswith("GB"):
+        return int(float(size_str[:-2]) * 1024 * 1024 * 1024)
+    else:
+        return int(float(size_str))
+
+
+def _format_bytes(b: int) -> str:
+    """将字节数格式化为可读字符串。"""
+    return format_bytes(b)
+
+
+def get_size_display(size: int) -> str:
+    """获取文件大小的显示字符串。"""
+    return format_bytes(size)
 
 
 def _print_plan(
@@ -322,11 +1032,7 @@ def _print_plan(
         for cat, files in sorted(categories.items()):
             if not files:
                 continue
-            if by_date:
-                target = path / cat
-            else:
-                target = path / cat
-            typer.echo(f"\n  📁 → {target.name}/ ({len(files)} 个文件)")
+            typer.echo(f"\n  📁 → {cat}/ ({len(files)} 个文件)")
             for f in files[:5]:
                 typer.echo(f"      📄 {f.name}")
             if len(files) > 5:
