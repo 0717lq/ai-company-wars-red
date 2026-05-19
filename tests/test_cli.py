@@ -166,7 +166,7 @@ class TestCliHistory:
         try:
             result = runner.invoke(app, ["history"])
             assert result.exit_code == 0
-            assert "暂无整理历史" in result.stdout
+            assert "暂无操作历史记录" in result.stdout
         finally:
             if old_content is not None:
                 hist_file.parent.mkdir(parents=True, exist_ok=True)
@@ -240,3 +240,148 @@ class TestEntryWrapper:
             assert len(sys.argv) == 2
         finally:
             sys.argv = old_argv
+
+
+# ══════════════════════════════════════════════════════════════
+#  Round 3 新增 CLI 测试
+# ══════════════════════════════════════════════════════════════
+
+
+class TestCliInit:
+    """测试 dirsort init 命令。"""
+
+    def test_init_creates_config(self):
+        """验证 init 创建默认配置文件。"""
+        result = runner.invoke(app, ["init"])
+        assert result.exit_code == 0
+        assert "已创建配置文件" in result.stdout
+
+    def test_init_idempotent(self):
+        """验证多次 init 不会报错。"""
+        runner.invoke(app, ["init"])
+        result = runner.invoke(app, ["init"])
+        assert result.exit_code == 0
+
+
+class TestCliConfig:
+    """测试 dirsort config 命令。"""
+
+    def test_config_path(self):
+        """验证 config --path 显示配置文件路径。"""
+        result = runner.invoke(app, ["config", "--path"])
+        assert result.exit_code == 0
+        assert "配置文件路径" in result.stdout or "config/" in result.stdout
+
+    def test_config_after_init(self):
+        """验证 init 后 config 显示内容。"""
+        runner.invoke(app, ["init"])
+        result = runner.invoke(app, ["config"])
+        assert result.exit_code == 0
+
+
+class TestCliDupes:
+    """测试 dirsort dupes 命令。"""
+
+    def test_dupes_empty_dir(self):
+        """验证空目录无重复文件。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            result = runner.invoke(app, ["dupes", tmp])
+            assert result.exit_code == 0
+            assert "没有找到重复文件" in result.stdout
+
+    def test_dupes_finds_duplicates(self):
+        """验证能发现重复文件。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "a.txt").write_text("same content")
+            (p / "b.txt").write_text("same content")
+            result = runner.invoke(app, ["dupes", tmp])
+            assert result.exit_code == 0
+            assert "发现" in result.stdout or "重复" in result.stdout
+
+
+class TestCliRename:
+    """测试 dirsort rename 命令。"""
+
+    def test_rename_preview(self):
+        """验证 rename 默认预览不执行。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "photo.jpg").touch()
+            result = runner.invoke(app, ["rename", tmp, "*.jpg", "img_%04d"])
+            assert result.exit_code == 0
+            assert "重命名计划" in result.stdout or "预览" in result.stdout
+            # 文件不应被重命名
+            assert (p / "photo.jpg").exists()
+
+    def test_rename_no_match(self):
+        """验证不匹配模式提示无文件。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            result = runner.invoke(app, ["rename", tmp, "*.xyz", "out"])
+            assert result.exit_code == 0
+            assert "没有找到匹配的文件" in result.stdout
+
+
+class TestCliJson:
+    """测试 --json 输出格式。"""
+
+    def test_sort_json_output(self):
+        """验证 sort --json 输出 JSON。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "test.jpg").touch()
+            result = runner.invoke(app, ["--json", "sort", tmp])
+            assert result.exit_code == 0
+            import json
+            data = json.loads(result.stdout)
+            assert data["operation"] == "sort"
+            assert "categories" in data or "status" in data
+
+    def test_dupes_json_output(self):
+        """验证 dupes --json 输出 JSON。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "a.txt").write_text("same")
+            (p / "b.txt").write_text("same")
+            result = runner.invoke(app, ["--json", "dupes", tmp])
+            assert result.exit_code == 0
+            import json
+            data = json.loads(result.stdout)
+            assert data["operation"] == "dupes"
+
+    def test_init_json_output(self):
+        """验证 init --json 输出 JSON。"""
+        result = runner.invoke(app, ["--json", "init"])
+        assert result.exit_code == 0
+        import json
+        data = json.loads(result.stdout)
+        assert data["operation"] == "init"
+
+    def test_history_json_output(self):
+        """验证 history --json 输出 JSON。"""
+        result = runner.invoke(app, ["--json", "history"])
+        assert result.exit_code == 0
+        import json
+        data = json.loads(result.stdout)
+        assert data["operation"] == "history"
+
+    def test_config_json_output(self):
+        """验证 config --json 输出 JSON。"""
+        result = runner.invoke(app, ["--json", "config", "--path"])
+        assert result.exit_code == 0
+        import json
+        data = json.loads(result.stdout)
+        assert data["operation"] == "config_path"
+
+
+class TestCliHelpV3:
+    """验证 --help 包含新命令。"""
+
+    def test_help_includes_new_commands(self):
+        """验证 --help 列出所有子命令。"""
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        for cmd in ["sort", "undo", "history", "init", "config",
+                     "dupes", "rename", "stats"]:
+            assert cmd in result.stdout, f"子命令 {cmd} 应在 --help 中"
+
