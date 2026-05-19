@@ -3,7 +3,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from dirsort.sorter import analyze, organize, _resolve_conflict
+from dirsort.sorter import analyze, organize, _resolve_conflict, _matches_any
 from dirsort.rules import classify
 
 
@@ -172,3 +172,88 @@ class TestAnalyze:
             (p / "README").touch()
             result = analyze(p)
             assert "其他" in result
+
+
+class TestAnalyzeExclude:
+    """测试 sorter 的排除功能。"""
+
+    def test_exclude_by_glob(self):
+        """验证 --exclude 模式排除文件。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "good.txt").touch()
+            (p / "bad.tmp").touch()
+            (p / "also_bad.tmp").touch()
+
+            result = analyze(p, exclude=["*.tmp"])
+            total = sum(len(f) for f in result.values())
+            assert total == 1
+            # 被排除的文件不在结果中
+            all_files = [f for files in result.values() for f in files]
+            assert all(f.name == "good.txt" for f in all_files)
+
+    def test_exclude_multiple_patterns(self):
+        """验证同时排除多个 glob 模式。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "doc.txt").touch()
+            (p / "temp.tmp").touch()
+            (p / "cache.log").touch()
+
+            result = analyze(p, exclude=["*.tmp", "*.log"])
+            total = sum(len(f) for f in result.values())
+            assert total == 1
+
+    def test_exclude_dir_by_name(self):
+        """验证排除指定目录名的文件。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "good.txt").touch()
+            # 创建一个子目录，排除该目录名
+            sub = p / "skip_me"
+            sub.mkdir()
+            (sub / "inside.txt").touch()
+
+            # 测试 analyze 会跳过子目录（不进入子目录）
+            result = analyze(p)
+            total = sum(len(f) for f in result.values())
+            assert total == 1  # 只有 good.txt，子目录内文件不会被扫描
+
+    def test_matches_any(self):
+        """验证 _matches_any 辅助函数。"""
+        assert _matches_any("test.tmp", ["*.tmp"])
+        assert _matches_any("test.TMP", ["*.tmp"]) is False  # fnmatch 区分大小写?
+        # fnmatch 在 Linux 上区分大小写，所以 test.TMP 不匹配 *.tmp
+        assert _matches_any("node_modules", ["node_modules"]) is True
+        assert _matches_any("readme.txt", ["*.tmp", "*.log"]) is False
+
+
+class TestAnalyzeWithConfigRules:
+    """测试使用配置规则的分析。"""
+
+    def test_analyze_with_custom_rules(self):
+        """验证使用自定义规则分类。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "script.py").touch()
+
+            custom_rules = {".py": "Python Files"}
+            result = analyze(p, rules=custom_rules)
+            assert "Python Files" in result
+            assert "代码" not in result  # 自定义规则替代了默认规则
+
+    def test_analyze_rules_merge_with_exclude(self):
+        """验证自定义规则和排除功能同时工作。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "main.py").touch()
+            (p / "test.py").touch()
+            (p / "readme.md").touch()
+
+            custom_rules = {".py": "Scripts", ".md": "Docs"}
+            result = analyze(p, rules=custom_rules, exclude=["test.py"])
+            assert "Scripts" in result
+            assert "Docs" in result
+            scripts = result["Scripts"]
+            assert len(scripts) == 1
+            assert scripts[0].name == "main.py"
