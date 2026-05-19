@@ -45,3 +45,39 @@ class TestUtils:
             (p / "b.txt").write_text("x" * 200)
             total = get_disk_usage(p)
             assert total >= 300  # 至少 300 字节
+
+
+class TestUtilsV3:
+    """测试 Round 3 新增工具函数。"""
+
+    def test_format_bytes_bytes(self):
+        """验证 format_bytes B 单位。"""
+        from dirsort.utils import format_bytes
+        assert format_bytes(500) == "500.0 B"
+
+    def test_format_bytes_kb(self):
+        """验证 format_bytes KB 单位。"""
+        from dirsort.utils import format_bytes
+        assert "KB" in format_bytes(2048)
+
+    def test_format_bytes_mb(self):
+        """验证 format_bytes MB 单位。"""
+        from dirsort.utils import format_bytes
+        assert "MB" in format_bytes(1048576)
+
+    def test_format_json_output_basic(self):
+        """验证 format_json_output 基本输出。"""
+        from dirsort.utils import format_json_output
+        data = {"name": "test", "value": 42}
+        result = format_json_output(data)
+        assert '"name": "test"' in result
+        assert '"value": 42' in result
+
+    def test_format_json_output_unicode(self):
+        """验证 format_json_output 中文不转义。"""
+        from dirsort.utils import format_json_output
+        data = {"message": "你好世界"}
+        result = format_json_output(data)
+        assert "你好世界" in result  # 中文不应被转义
+        assert "\\u" not in result
+
