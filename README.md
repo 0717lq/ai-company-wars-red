@@ -7,15 +7,30 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/0717lq/ai-company-wars-red/actions/workflows/ci.yml/badge.svg)](https://github.com/0717lq/ai-company-wars-red/actions/workflows/ci.yml)
-[![PyPI - Version](https://img.shields.io/badge/pypi-v0.4.0-orange)](https://pypi.org/project/dirsort/)
+[![PyPI - Version](https://img.shields.io/pypi/v/dirsort?color=orange)](https://pypi.org/project/dirsort/)
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/dirsort?color=blue)](https://pypi.org/project/dirsort/)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/0717lq/ai-company-wars-red/pkgs/container/dirsort)
 [![OS - Linux | macOS | Windows](https://img.shields.io/badge/OS-Linux%20|%20macOS%20|%20Windows-lightgrey)](https://pypi.org/project/dirsort/)
-[![Coverage](https://img.shields.io/badge/coverage-82%25-brightgreen)]()
-[![TUI](https://img.shields.io/badge/✨-Textual%20TUI-blueviolet)]()
-[![Agent Skill](https://img.shields.io/badge/🤖-Agent%20Skill-blue)]()
+[![TUI](https://img.shields.io/badge/✨-Textual%20TUI-blueviolet)](https://textual.textualize.io/)
+[![Agent Skill](https://img.shields.io/badge/🤖-Agent%20Skill-blue)](.claude/skills/dirsort.md)
 
-**🇨🇳 中文** · [English](./README.md)
+**🇨🇳 中文** · [English](./README.en.md)
 
 </div>
+
+---
+
+## 🎉 What's New in v0.4.0 — "TUI + Agent-Ready"
+
+> 这是 dirsort 最大的一次更新！🚀
+
+| 新功能 | 说明 | 操作 |
+|--------|------|------|
+| 🖥️ **交互式 TUI** | Textual 终端界面，四大面板可视化整理 | `dirsort tui ~/Downloads` |
+| 🤖 **AI Agent Skill** | Claude Code / Codex 开箱即用 | [dirsort.md](.claude/skills/dirsort.md) |
+| 🐳 **Docker 镜像** | `python:3.11-slim` 多阶段构建 | `docker run ghcr.io/0717lq/dirsort` |
+| 🔧 **Pre-commit Hook** | Git commit 前自动检查 | [配置指南](#🔧-pre-commit-hook) |
+| ✨ `dirsort[all]` | 一行安装全部依赖 | `pip install "dirsort[all]"` |
 
 ---
 
@@ -108,8 +123,14 @@ pip install "dirsort[all]"             # 全部安装
 ### Docker 运行
 
 ```bash
+# 一键拉取并运行（推荐）
 docker run --rm -v $(pwd):/data ghcr.io/0717lq/dirsort sort /data
-docker run --rm -v $(pwd):/data ghcr.io/0717lq/dirsort tui /data  # TUI 需交互式终端
+
+# 交互式 TUI（需要交互式终端）
+docker run --rm -it -v $(pwd):/data ghcr.io/0717lq/dirsort tui /data
+
+# 检测重复文件
+docker run --rm -v $(pwd):/data ghcr.io/0717lq/dirsort dupes /data
 ```
 
 ### 从源码安装
@@ -351,21 +372,35 @@ Claude: dirsort dupes /path/to/project --json
 
 ## 🐳 Docker
 
-```bash
-# 构建镜像
-docker build -t dirsort .
+从 GitHub Container Registry 拉取：
 
-# 运行
+```bash
+docker pull ghcr.io/0717lq/dirsort:latest
+
+# 整理当前目录
+docker run --rm -v $(pwd):/data ghcr.io/0717lq/dirsort sort /data
+
+# 检测重复文件
+docker run --rm -v $(pwd):/data ghcr.io/0717lq/dirsort dupes /data
+
+# TUI 交互模式（需交互式终端）
+docker run --rm -it -v $(pwd):/data ghcr.io/0717lq/dirsort tui /data
+```
+
+也可本地构建：
+
+```bash
+git clone https://github.com/0717lq/ai-company-wars-red.git
+cd ai-company-wars-red
+docker build -t dirsort .
 docker run --rm -v $(pwd):/data dirsort sort /data
-docker run --rm -v $(pwd):/data dirsort dupes /data
-docker run --rm -it -v $(pwd):/data dirsort tui /data  # 交互模式
 ```
 
 ---
 
 ## 🔧 Pre-commit Hook
 
-在项目中启用 dirsort 检查：
+在项目中启用 dirsort 检查（Git commit 前自动检测未整理的临时文件）：
 
 ```yaml
 # .pre-commit-config.yaml
@@ -375,8 +410,6 @@ repos:
     hooks:
       - id: dirsort-check
 ```
-
-Git commit 前自动检查项目中是否有未整理的临时文件。
 
 ---
 

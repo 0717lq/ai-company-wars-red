@@ -13,6 +13,9 @@ keywords = [
     "file-organization", "file-sorter", "cli", "utility",
     "productivity", "directory-cleaner", "file-management",
     "python", "typer", "rich", "yaml",
+    "tui", "textual", "terminal-ui",
+    "duplicate-files", "batch-rename",
+    "docker", "ai-agent", "developer-tools",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -30,7 +33,7 @@ classifiers = [
 dependencies = [
     "typer>=0.9.0",
 ]
-optional-dependencies = {dev = ["pytest>=7", "pytest-cov>=4", "pytest-asyncio>=0.21"], full = ["rich>=13.0.0", "pyyaml>=6.0"], tui = ["textual>=0.52"]}
+optional-dependencies = {dev = ["pytest>=7", "pytest-cov>=4", "pytest-asyncio>=0.21"], full = ["rich>=13.0.0", "pyyaml>=6.0"], tui = ["textual>=0.52"], all = ["dirsort[full,tui]"]}
 
 [project.urls]
 Homepage = "https://github.com/0717lq/ai-company-wars-red"
