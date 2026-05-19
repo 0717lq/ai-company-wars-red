@@ -12,34 +12,47 @@ runner = CliRunner()
 
 class TestCliSort:
     def test_sort_empty_dir(self):
-        """验证对空目录运行 sort 命令。"""
+        """验证对空目录运行 sort 命令（默认 dry-run）。"""
         with tempfile.TemporaryDirectory() as tmp:
             result = runner.invoke(app, ["sort", tmp])
             assert result.exit_code == 0
+            # 默认 dry-run 模式，显示扫描信息
             assert "正在扫描" in result.stdout
 
     def test_sort_dry_run(self):
-        """验证 --dry-run 模式不移动文件。"""
+        """验证默认模式（dry-run）不移动文件。"""
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp)
             (p / "photo.jpg").touch()
             (p / "doc.pdf").touch()
 
-            result = runner.invoke(app, ["sort", "--dry-run", tmp])
+            # 不传 --execute，默认 dry-run
+            result = runner.invoke(app, ["sort", tmp])
             assert result.exit_code == 0
             assert "Dry-run" in result.stdout
             # 确认文件没有被移动
             assert (p / "photo.jpg").exists()
             assert (p / "doc.pdf").exists()
 
+    def test_sort_explicit_dry_run(self):
+        """验证显式 --dry-run 也不移动文件（向后兼容）。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "photo.jpg").touch()
+
+            result = runner.invoke(app, ["sort", "--dry-run", tmp])
+            assert result.exit_code == 0
+            assert "Dry-run" in result.stdout
+            assert (p / "photo.jpg").exists()
+
     def test_sort_actual_move(self):
-        """验证 sort 实际移动文件到分类目录。"""
+        """验证 sort --execute 实际移动文件到分类目录。"""
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp)
             (p / "photo.jpg").touch()
             (p / "doc.pdf").touch()
 
-            result = runner.invoke(app, ["sort", tmp])
+            result = runner.invoke(app, ["sort", "--execute", tmp])
             assert result.exit_code == 0
             # 文件应被移动
             assert not (p / "photo.jpg").exists()
@@ -62,18 +75,46 @@ class TestCliSort:
             assert (p / "doc.pdf").exists()
 
     def test_sort_by_date(self):
-        """验证 --by-date 按日期分类。"""
+        """验证 --by-date --execute 按日期分类。"""
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp)
             (p / "file.txt").touch()
 
-            result = runner.invoke(app, ["sort", "--by-date", tmp])
+            result = runner.invoke(app, ["sort", "--by-date", "--execute", tmp])
             assert result.exit_code == 0
             # 文件应被移动到日期目录
             assert not (p / "file.txt").exists()
             # 找到日期目录
             date_dirs = [d for d in p.iterdir() if d.is_dir() and len(d.name) == 7]
             assert len(date_dirs) >= 1
+
+    def test_sort_with_exclude(self):
+        """验证 --exclude 排除文件。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "photo.jpg").touch()
+            (p / "notes.tmp").touch()
+
+            # dry-run 下验证排除效果
+            result = runner.invoke(app, ["sort", "--exclude", "*.tmp", tmp])
+            assert result.exit_code == 0
+            assert "photo.jpg" in result.stdout
+            # .tmp 文件不会被包含在计划中
+            assert (p / "notes.tmp").exists()  # 而且没被移动
+
+    def test_sort_with_exclude_dirs(self):
+        """验证 --exclude-dir 排除目录中的文件。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "photo.jpg").touch()
+
+            # 排除当前目录名（虽然文件直接在当前目录，但 pathlib 的 parent.name 会匹配）
+            result = runner.invoke(
+                app, ["sort", "--exclude-dir", p.name, "--execute", tmp]
+            )
+            assert result.exit_code == 0
+            # 文件没有被移走（因为目录被排除）
+            assert (p / "photo.jpg").exists()
 
 
 class TestCliUndo:
@@ -89,8 +130,8 @@ class TestCliUndo:
             p = Path(tmp)
             (p / "photo.jpg").touch()
 
-            # 先整理
-            runner.invoke(app, ["sort", tmp])
+            # 先整理（用 --execute 执行）
+            runner.invoke(app, ["sort", "--execute", tmp])
             assert not (p / "photo.jpg").exists()
             assert (p / "图片" / "photo.jpg").exists()
 
@@ -100,6 +141,17 @@ class TestCliUndo:
             assert "已回滚" in result.stdout
             # 文件应回到原始位置
             assert (p / "photo.jpg").exists()
+
+    def test_undo_verbose(self):
+        """验证 --verbose 显示详细回滚信息。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            (p / "photo.jpg").touch()
+
+            runner.invoke(app, ["sort", "--execute", tmp])
+            result = runner.invoke(app, ["undo", "--verbose", tmp])
+            assert result.exit_code == 0
+            assert "已回滚" in result.stdout
 
 
 class TestCliHistory:
@@ -125,7 +177,7 @@ class TestCliHistory:
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp)
             (p / "photo.jpg").touch()
-            runner.invoke(app, ["sort", tmp])
+            runner.invoke(app, ["sort", "--execute", tmp])
             result = runner.invoke(app, ["history"])
             assert result.exit_code == 0
 
@@ -147,6 +199,10 @@ class TestCliHelp:
         assert "--dry-run" in result.stdout
         assert "--by-date" in result.stdout
         assert "--stats" in result.stdout
+        assert "--execute" in result.stdout
+        assert "--exclude" in result.stdout
+        assert "--exclude-dir" in result.stdout
+        assert "--config" in result.stdout
 
     def test_nonexistent_path(self):
         """验证不存在的路径给出错误提示。"""
@@ -164,8 +220,6 @@ class TestEntryWrapper:
             old_argv = sys.argv
             try:
                 sys.argv = ["dirsort", tmp]
-                # entry() 会修改 sys.argv，然后调用 app()
-                # 我们只验证它插入了 'sort'
                 known = {"undo", "history", "--help", "-h"}
                 if len(sys.argv) > 1 and sys.argv[1] not in known:
                     sys.argv.insert(1, "sort")

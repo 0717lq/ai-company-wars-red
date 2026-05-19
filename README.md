@@ -7,9 +7,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/0717lq/ai-company-wars-red/actions/workflows/ci.yml/badge.svg)](https://github.com/0717lq/ai-company-wars-red/actions/workflows/ci.yml)
-[![PyPI - Version](https://img.shields.io/badge/pypi-v0.1.0-orange)](https://pypi.org/project/dirsort/)
+[![PyPI - Version](https://img.shields.io/badge/pypi-v0.2.0-orange)](https://pypi.org/project/dirsort/)
 [![OS - Linux | macOS | Windows](https://img.shields.io/badge/OS-Linux%20|%20macOS%20|%20Windows-lightgrey)](https://pypi.org/project/dirsort/)
-[![Downloads](https://img.shields.io/badge/dynamic/json?label=downloads&query=downloads&url=https%3A%2F%2Fpypistats.org%2Fapi%2Fpackages%2Fdirsort%2Frecent%3Fperiod%3Dmonth&color=blue)]()
+[![Coverage](https://img.shields.io/badge/coverage-82%25-brightgreen)]()
+[![Rich](https://img.shields.io/badge/✨-Rich%20Output-ff69b4)]()
 
 **🇨🇳 中文** · [English](./README.md)
 
@@ -24,29 +25,20 @@ $ dirsort ~/Downloads
 
 📂 正在扫描: /Users/me/Downloads
 
-📋 整理计划（共 42 个文件）：
+   📋 整理计划（共 42 个文件）    
+╭──────────┬────────┬──────────────────────────╮
+│ 目标目录 │ 文件数 │ 文件示例                 │
+├──────────┼────────┼──────────────────────────┤
+│ 📁 图片/ │      8 │ screencast.png, ...      │
+│ 📁 文档/ │     15 │ report.pdf, README.md... │
+│ 📁 压缩包│      3 │ project.zip, ...         │
+╰──────────┴────────┴──────────────────────────╯
 
-  📁 → 图片/ (8 个文件)
-      📄 screencast.png
-      📄 photo_001.jpg
-      📄 logo.svg
-      ...
-
-  📁 → 文档/ (15 个文件)
-      📄 report.pdf
-      📄 meeting-notes.docx
-      📄 README.md
-      ...
-
-  📁 → 压缩包/ (3 个文件)
-      📄 project.zip
-      📄 archive.tar.gz
-
-⏸️  Dry-run 模式 — 未执行任何操作。移除 --dry-run 以执行。
+⏸️  Dry-run 模式 — 未执行任何操作。使用 --execute 来真正执行整理。
 ```
 
 ```text
-$ dirsort ~/Downloads
+$ dirsort ~/Downloads --execute
 📂 正在扫描: /Users/me/Downloads
 🔄 正在整理...
 ✅ 整理完成！移动了 42 个文件。
@@ -61,11 +53,11 @@ $ dirsort ~/Downloads
 # 1. 安装
 pip install dirsort
 
-# 2. 预览整理效果（安全模式，不执行任何操作）
-dirsort ~/Downloads --dry-run
-
-# 3. 执行整理
+# 2. 预览整理效果（默认 safe dry-run，不执行任何操作）
 dirsort ~/Downloads
+
+# 3. 确认无误后执行（加 --execute 标志）
+dirsort ~/Downloads --execute
 
 # 4. 不满意？一键回滚
 dirsort undo
@@ -84,7 +76,7 @@ dirsort undo
 | 找昨天下的 PDF | 在 500 个文件里翻 | 直接去 `文档/` 目录 |
 | 清理桌面截图 | 手动建文件夹、拖拽 | `dirsort ~/Desktop` |
 | 想按月份看文件 | 自己看修改时间 | `dirsort ~/Downloads --by-date` |
-| 怕弄乱不敢整理 | 啥也不干 | `--dry-run` 先预览 |
+| 怕弄乱不敢整理 | 啥也不干 | **默认 dry-run** — 安全先预览 |
 | 整理完后悔了 | 一个个拖回去 | `dirsort undo` 回滚 |
 
 ---
@@ -95,6 +87,8 @@ dirsort undo
 
 ```bash
 pip install dirsort
+# 如需富文本输出和配置文件支持：
+pip install "dirsort[full]"
 ```
 
 ### 从源码安装
@@ -102,7 +96,7 @@ pip install dirsort
 ```bash
 git clone https://github.com/0717lq/ai-company-wars-red.git
 cd ai-company-wars-red
-pip install -e ".[dev]"   # 开发模式，包含测试依赖
+pip install -e ".[full,dev]"   # 开发模式，全部依赖
 ```
 
 ---
@@ -112,8 +106,11 @@ pip install -e ".[dev]"   # 开发模式，包含测试依赖
 ### 基本用法
 
 ```bash
-# 整理一个目录（按文件类型分类）
+# 默认 dry-run（安全预览，不执行任何操作）
 dirsort ~/Downloads
+
+# 真正整理（加 --execute）
+dirsort ~/Downloads --execute
 
 # 简写路径也行
 dirsort .
@@ -122,14 +119,17 @@ dirsort .
 ### 安全预览
 
 ```bash
-dirsort ~/Downloads --dry-run    # 或 -n
-# 显示分类计划，不移动任何文件
+# 默认已是 dry-run，不需要额外参数
+dirsort ~/Downloads
+
+# 也可以显式指定（向后兼容）
+dirsort ~/Downloads --dry-run
 ```
 
 ### 按日期分类
 
 ```bash
-dirsort ~/Downloads --by-date    # 或 -d
+dirsort ~/Downloads --by-date --execute   # 或 -d
 # 按月份分到 2026-05/、2026-04/ 等子目录
 ```
 
@@ -139,24 +139,62 @@ dirsort ~/Downloads --by-date    # 或 -d
 dirsort ~/Downloads --stats      # 或 -s
 # 只看数字，不移动文件
 # 📊 统计结果（共 42 个文件）：
-#   图片: 8 个文件
-#   文档: 15 个文件
-#   视频: 2 个文件
-#   代码: 6 个文件
-#   压缩包: 3 个文件
-#   其他: 8 个文件
+# ╭──────────┬────────┬────────╮
+# │ 分类     │ 文件数 │ 占比   │
+# ├──────────┼────────┼────────┤
+# │ 图片     │      8 │ 19.0%  │
+# │ 文档     │     15 │ 35.7%  │
+# │ 代码     │      6 │ 14.3%  │
+# ╰──────────┴────────┴────────╯
+```
+
+### 排除文件/目录
+
+```bash
+# 排除临时文件
+dirsort ~/Downloads --exclude "*.tmp" --exclude "*.log"
+
+# 排除特定目录
+dirsort ~/Downloads --exclude-dir node_modules --exclude-dir __pycache__
+
+# 组合使用
+dirsort ~/Downloads --execute --exclude "*.tmp" --exclude-dir node_modules
+```
+
+### 自定义分类规则
+
+```bash
+# 使用 YAML 配置文件自定义分类
+dirsort ~/Downloads --config my-rules.yaml
+
+# 自动检测 ~/.config/dirsort/rules.yaml（如果存在）
+```
+
+示例规则文件 `my-rules.yaml`：
+
+```yaml
+rules:
+  - pattern: "*.pdf"
+    category: "Documents/PDFs"
+  - pattern: "*.jpg"
+    category: "My Images"
+  - pattern: "*.tar.gz"
+    category: "Archives"
 ```
 
 ### 回滚操作
 
 ```bash
-# 回滚最近一次整理
+# 回滚最近一次整理（带 Rich 表格详情）
 dirsort undo
+
+# 查看详细回滚信息
+dirsort undo --verbose
 
 # 回滚指定目录的最近一次整理
 dirsort undo ~/Downloads
 
-# 查看整理历史
+# 查看整理历史（Rich 表格展示）
 dirsort history
 ```
 
@@ -176,12 +214,16 @@ dirsort undo --help
 
 | 功能 | 说明 |
 |------|------|
+| ✅ **默认安全模式** | 默认 dry-run，必须加 `--execute` 才执行，彻底杜绝误操作 |
 | ✅ **按文件类型分类** | 图片、文档、视频、音频、代码、压缩包等 10+ 类别，90+ 文件后缀 |
 | ✅ **按日期分类** | 自动按修改时间分到 `2026-05/` 等月份子目录 |
-| ✅ **Dry-run 模式** | 先预览后执行，零风险 |
+| ✅ **文件排除** | `--exclude "*.tmp"` 跳过指定模式文件，`--exclude-dir node_modules` 跳过目录 |
+| ✅ **Rich 美化输出** | 彩色表格、对齐格式化、emoji 图标。无 Rich 自动降级到纯文本 |
 | ✅ **自动冲突处理** | 同名文件自动加编号后缀，不丢失 |
 | ✅ **Undo 回滚** | 一键撤销上次整理，后悔药管够 |
-| ✅ **统计模式** | 只看数据不动手 |
+| ✅ **统计模式** | 带占比的 Rich 表格统计，一目了然 |
+| ✅ **配置文件系统** | `--config rules.yaml` 自定义分类规则，支持 `~/.config/dirsort/rules.yaml` 自动加载 |
+| ✅ **错误处理** | PermissionError/OSError 优雅跳过，不中断流程 |
 | ✅ **隐藏文件保护** | 不触碰 `.` 开头的文件 |
 | ✅ **中文友好** | 完整中文界面和分类名 |
 | ✅ **跨平台** | Linux / macOS / Windows 全支持 |
@@ -205,29 +247,47 @@ dirsort undo --help
 
 ## 📊 对比同类工具
 
-| 特性 | **dirsort** 🏆 | organize-cli | ffs | 手动整理 |
-|------|---------------|-------------|-----|---------|
-| Dry-run 预览 | ✅ | ✅ | ❌ | — |
+| 特性 | **dirsort v0.2.0** 🏆 | organize-cli | fclean (蓝队) | 手动整理 |
+|------|----------------------|-------------|--------------|---------|
+| 默认安全模式（dry-run） | ✅ **默认** | ❌ | ✅ | — |
 | Undo 回滚 | ✅ | ❌ | ❌ | 😭 |
 | 按日期分类 | ✅ | ❌ | ✅ | 手动 |
+| 文件排除 | ✅ | ✅ | ✅ | — |
+| Rich 美化输出 | ✅ | ❌ | ✅ | — |
+| **配置文件系统** | ✅ **独家** | ❌ | ❌ | — |
 | 中文界面 | ✅ | ❌ | ❌ | — |
 | 统计模式 | ✅ | ❌ | ❌ | — |
-| 零配置开箱即用 | ✅ | ✅ | ❌ | — |
-| 安装 | `pip install dirsort` | 需要配置规则文件 | 复杂 | 无 |
+| 零配置开箱即用 | ✅ | ✅ | ✅ | — |
+| 安装 | `pip install dirsort` | 需要配置规则文件 | `pip install fclean` | 无 |
 
-**dirsort 的差异化优势：** 更安全（dry-run + undo 双保险）、更易用（零配置、中文友好）、更全面（类型 + 日期双模式）。
+**dirsort 的差异化优势：** 更安全（默认 dry-run + undo 双保险）、更灵活（配置文件系统独家卖点）、更易用（零配置、中文友好、Rich 美化输出）。
 
 ---
 
-## 🛠️ 自定义与扩展
+## 🛠️ 配置文件系统（独家卖点）
 
-> 计划中 — 后续版本将支持：
+`dirsort --config rules.yaml` 让你的整理规则完全自定义：
 
-- [ ] 自定义配置文件（`~/.dirsort/config.toml`）
-- [ ] 定时自动整理
-- [ ] Web UI 界面
-- [ ] 重复文件检测
-- [ ] 自定义分类规则
+```yaml
+# ~/.config/dirsort/rules.yaml
+rules:
+  # 自定义分类：将 PDF 放入专用目录
+  - pattern: "*.pdf"
+    category: "Documents/PDFs"
+
+  # 自定义分类：学术论文
+  - pattern: "*.paper"
+    category: "Research"
+
+  # 多后缀文件支持
+  - pattern: "*.tar.gz"
+    category: "Source Archives"
+```
+
+**三大优势：**
+- **覆盖默认规则** — 自定义分类名会覆盖默认分类
+- **自动加载** — 放在 `~/.config/dirsort/rules.yaml` 自动生效
+- **可分享** — 配置文件可以分享为 dotfiles，团队统一使用
 
 ---
 
@@ -246,9 +306,9 @@ dirsort undo --help
 ```bash
 git clone https://github.com/0717lq/ai-company-wars-red.git
 cd ai-company-wars-red
-pip install -e ".[dev]"
-pytest              # 运行测试
-pytest --cov=src    # 测试覆盖率
+pip install -e ".[full,dev]"
+pytest              # 运行测试（77 个测试全通过）
+pytest --cov=src    # 测试覆盖率（82%+）
 ```
 
 所有 PR 自动运行 CI 测试（Python 3.10 / 3.11 / 3.12）。

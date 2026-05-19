@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dirsort"
-version = "0.1.0"
-description = "智能文件目录整理 CLI 工具 — 一键解决杂乱目录的烦恼。支持按类型/日期分类、Dry-run 预览、Undo 回滚。"
+version = "0.2.0"
+description = "智能文件目录整理 CLI 工具 — 一键解决杂乱目录的烦恼。支持按类型/日期分类、Dry-run 预览、Undo 回滚、YAML 配置规则。"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 keywords = [
     "file-organization", "file-sorter", "cli", "utility",
     "productivity", "directory-cleaner", "file-management",
-    "python", "typer",
+    "python", "typer", "rich", "yaml",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -30,7 +30,7 @@ classifiers = [
 dependencies = [
     "typer>=0.9.0",
 ]
-optional-dependencies = {dev = ["pytest>=7", "pytest-cov>=4"]}
+optional-dependencies = {dev = ["pytest>=7", "pytest-cov>=4"], full = ["rich>=13.0.0", "pyyaml>=6.0"]}
 
 [project.urls]
 Homepage = "https://github.com/0717lq/ai-company-wars-red"
