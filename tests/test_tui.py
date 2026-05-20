@@ -7,7 +7,8 @@ import pytest
 from typer.testing import CliRunner
 
 from dirsort.cli import app
-from dirsort.tui_app import HAS_TEXTUAL, _format_size, run_tui
+from dirsort.tui_app import HAS_TEXTUAL, run_tui
+from dirsort.utils import format_bytes
 
 # ── 基础测试 ────────────────────────────────────────────────
 
@@ -24,14 +25,14 @@ def test_run_tui_function_exists():
 
 def test_format_size():
     """测试文件大小格式化函数。"""
-    assert _format_size(0) == "0B"
-    assert _format_size(500) == "500B"
-    assert _format_size(1024) == "1.0KB"
-    assert _format_size(2048) == "2.0KB"
-    assert _format_size(1024 * 1024) == "1.0MB"
-    assert _format_size(2 * 1024 * 1024) == "2.0MB"
-    assert _format_size(1024 * 1024 * 1024) == "1.0GB"
-    assert _format_size(1536 * 1024 * 1024) == "1.5GB"
+    assert format_bytes(0) == "0.0 B"
+    assert format_bytes(500) == "500.0 B"
+    assert format_bytes(1024) == "1.0 KB"
+    assert format_bytes(2048) == "2.0 KB"
+    assert format_bytes(1024 * 1024) == "1.0 MB"
+    assert format_bytes(2 * 1024 * 1024) == "2.0 MB"
+    assert format_bytes(1024 * 1024 * 1024) == "1.0 GB"
+    assert format_bytes(1536 * 1024 * 1024) == "1.5 GB"
 
 
 # ── CLI 测试 ────────────────────────────────────────────────
