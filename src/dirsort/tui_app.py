@@ -7,23 +7,23 @@ Textual 是可选依赖，未安装时降级为提示信息。
 """
 
 from __future__ import annotations
+
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 # ── Textual 降级兼容 ──
 try:
     from textual.app import App, ComposeResult
     from textual.binding import Binding
-    from textual.widgets import Header, Footer, Static, RichLog, TabbedContent, TabPane
+    from textual.widgets import Footer, Header, RichLog, Static, TabbedContent, TabPane
 
     HAS_TEXTUAL = True
 except ImportError:
     HAS_TEXTUAL = False
 
+from .config import get_merged_rules
 from .sorter import analyze, organize
 from .undo import UndoManager
-from .config import get_merged_rules
-
+from .utils import format_bytes
 
 # ══════════════════════════════════════════════════════════════
 #  外部入口
@@ -141,7 +141,7 @@ if HAS_TEXTUAL:
                     lines.append(f"\n[bold]{cat_name}[/] ({len(files)} 个文件):")
                     for f in files[:20]:
                         size = f.stat().st_size if f.exists() else 0
-                        size_str = _format_size(size)
+                        size_str = format_bytes(size)
                         lines.append(f"  📄 {f.name} [dim]{size_str}[/]")
                     if len(files) > 20:
                         lines.append(f"  [dim]…以及 {len(files) - 20} 个更多文件[/]")
@@ -191,7 +191,7 @@ if HAS_TEXTUAL:
                     bar = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
                     lines.append(
                         f"{bar}  [bold]{cat_name}[/]  {len(files):>4} 个  "
-                        f"{_format_size(total_size):>8}  ({pct:.0f}%)"
+                        f"{format_bytes(total_size):>8}  ({pct:.0f}%)"
                     )
             self.query_one("#stats-content", Static).update("\n".join(lines))
 
@@ -257,13 +257,3 @@ if HAS_TEXTUAL:
 # ── 工具函数 ────────────────────────────────────────────────
 
 
-def _format_size(size_bytes: int) -> str:
-    """格式化文件大小为可读字符串。"""
-    if size_bytes < 1024:
-        return f"{size_bytes}B"
-    elif size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.1f}KB"
-    elif size_bytes < 1024 * 1024 * 1024:
-        return f"{size_bytes / 1024 / 1024:.1f}MB"
-    else:
-        return f"{size_bytes / 1024 / 1024 / 1024:.1f}GB"

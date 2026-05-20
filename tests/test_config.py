@@ -2,7 +2,7 @@
 import tempfile
 from pathlib import Path
 
-from dirsort.config import load_config, get_merged_rules
+from dirsort.config import get_merged_rules, load_config
 from dirsort.rules import DEFAULT_RULES
 
 

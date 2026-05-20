@@ -1,6 +1,5 @@
 """文件操作工具函数。"""
 import json
-import shutil
 from pathlib import Path
 
 

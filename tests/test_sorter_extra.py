@@ -3,8 +3,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from dirsort.sorter import analyze, organize, _resolve_conflict, _matches_any
-from dirsort.rules import classify
+from dirsort.sorter import _matches_any, _resolve_conflict, analyze, organize
 
 
 class TestOrganize:

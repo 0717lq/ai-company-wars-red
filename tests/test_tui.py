@@ -1,14 +1,13 @@
 """dirsort TUI 测试 — Textual 交互界面测试。"""
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
+import pytest
 from typer.testing import CliRunner
 
 from dirsort.cli import app
-from dirsort.tui_app import HAS_TEXTUAL, run_tui, _format_size
-
-import pytest
-
+from dirsort.tui_app import HAS_TEXTUAL, _format_size, run_tui
 
 # ── 基础测试 ────────────────────────────────────────────────
 
@@ -93,8 +92,9 @@ async def test_tui_app_mount():
         pytest.skip("Textual 未安装，跳过 TUI 测试")
 
     # 验证 DirsortTUI 类的基本属性
-    from dirsort.tui_app import DirsortTUI
     import tempfile
+
+    from dirsort.tui_app import DirsortTUI
 
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "photo.jpg").write_text("jpg")

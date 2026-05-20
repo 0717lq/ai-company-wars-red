@@ -2,8 +2,8 @@
 import tempfile
 from pathlib import Path
 
-from dirsort.rules import classify, DEFAULT_RULES, get_all_categories
-from dirsort.sorter import analyze, _resolve_conflict
+from dirsort.rules import classify, get_all_categories
+from dirsort.sorter import _resolve_conflict, analyze
 
 
 class TestRules:

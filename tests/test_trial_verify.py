@@ -1,5 +1,4 @@
 """试跑验证 — 验证 Dev Agent 流水线可正常工作。"""
-import pytest
 
 
 def test_dev_pipeline_can_run():

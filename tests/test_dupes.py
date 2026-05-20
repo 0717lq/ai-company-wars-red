@@ -3,13 +3,11 @@ import hashlib
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from dirsort.dupes import (
-    find_duplicates,
-    delete_duplicates,
     DuplicateGroup,
     _md5_file,
+    delete_duplicates,
+    find_duplicates,
 )
 
 
@@ -192,10 +190,14 @@ class TestDeleteDuplicates:
     def test_delete_multiple_groups(self):
         """验证多组删除。"""
         with tempfile.TemporaryDirectory() as tmp:
-            a1 = Path(tmp) / "a1.txt"; a1.write_text("aaa")
-            a2 = Path(tmp) / "a2.txt"; a2.write_text("aaa")
-            b1 = Path(tmp) / "b1.txt"; b1.write_text("bbb")
-            b2 = Path(tmp) / "b2.txt"; b2.write_text("bbb")
+            a1 = Path(tmp) / "a1.txt"
+            a1.write_text("aaa")
+            a2 = Path(tmp) / "a2.txt"
+            a2.write_text("aaa")
+            b1 = Path(tmp) / "b1.txt"
+            b1.write_text("bbb")
+            b2 = Path(tmp) / "b2.txt"
+            b2.write_text("bbb")
             g1 = DuplicateGroup(
                 hashlib.md5(b"aaa").hexdigest(), [a1, a2])
             g2 = DuplicateGroup(
@@ -212,8 +214,10 @@ class TestDuplicateGroup:
     def test_to_dict(self):
         """验证序列化。"""
         with tempfile.TemporaryDirectory() as tmp:
-            f1 = Path(tmp) / "a.txt"; f1.write_text("content")
-            f2 = Path(tmp) / "b.txt"; f2.write_text("content")
+            f1 = Path(tmp) / "a.txt"
+            f1.write_text("content")
+            f2 = Path(tmp) / "b.txt"
+            f2.write_text("content")
             h = hashlib.md5(b"content").hexdigest()
             g = DuplicateGroup(h, [f1, f2])
             d = g.to_dict()

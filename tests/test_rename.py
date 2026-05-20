@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 
 from dirsort.rename import (
+    RenameEntry,
     build_rename_plan,
     execute_rename,
-    RenameEntry,
 )
 
 

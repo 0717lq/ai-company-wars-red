@@ -1,9 +1,9 @@
 """核心排序逻辑 — 扫描目录并按规则分类文件。"""
-from pathlib import Path
 from fnmatch import fnmatch
+from pathlib import Path
 
-from .rules import classify as default_classify
 from .config import get_merged_rules
+from .rules import classify as default_classify
 
 
 def analyze(

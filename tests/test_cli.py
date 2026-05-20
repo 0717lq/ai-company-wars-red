@@ -5,7 +5,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from dirsort.cli import app, entry
+from dirsort.cli import app
 
 runner = CliRunner()
 

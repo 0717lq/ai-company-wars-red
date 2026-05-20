@@ -1,7 +1,7 @@
 """批量重命名模块 — 按匹配模式批量重命名文件，支持序号模板。"""
 import re
-from pathlib import Path
 from fnmatch import fnmatch
+from pathlib import Path
 
 
 class RenameEntry:
@@ -79,13 +79,13 @@ def build_rename_plan(
         # 检查模板是否包含 %d / %04d 等序号模式
         has_counter = bool(re.search(r"%\d*d", template))
         if has_counter:
-            def replace_counter(m: re.Match) -> str:
+            def replace_counter(m: re.Match, _i: int = i) -> str:
                 fmt = m.group(0)
                 # 从格式中提取宽度（如果有）
                 width_match = re.search(r"%0?(\d+)?d", fmt)
                 if width_match and width_match.group(1):
-                    return f"{i:0{width_match.group(1)}d}"
-                return str(i)
+                    return f"{_i:0{width_match.group(1)}d}"
+                return str(_i)
 
             new_stem = re.sub(r"%\d*d", replace_counter, template)
         else:

@@ -1,34 +1,32 @@
-"""Typer CLI 定义 — dirsort 命令行入口（v0.3.0 增强版）。"""
+"""Typer CLI 定义 — dirsort 命令行入口。"""
+from fnmatch import fnmatch
 from pathlib import Path
 
 import typer
 
-from .sorter import analyze, organize
-from .undo import UndoManager
+from . import __version__
 from .config import (
-    load_config,
-    get_merged_rules,
-    create_default_config,
-    config_content,
-    DEFAULT_CONFIG_DIR,
     DEFAULT_CONFIG_FILE,
+    config_content,
+    create_default_config,
+    get_merged_rules,
+    load_config,
 )
-from fnmatch import fnmatch
-
 from .dupes import (
     find_duplicates,
-    delete_duplicates,
 )
 from .rename import build_rename_plan, execute_rename
-from .utils import format_json_output, format_bytes
+from .sorter import analyze, organize
 from .tui_app import run_tui as _run_tui
+from .undo import UndoManager
+from .utils import format_bytes, format_json_output
 
 # ── Rich 降级兼容 ──────────────────────────────────────────────
 try:
-    from rich.console import Console
-    from rich.table import Table
     from rich import box
+    from rich.console import Console
     from rich.progress import track
+    from rich.table import Table
 
     HAS_RICH = True
 except ImportError:
@@ -69,10 +67,14 @@ app = make_app()
 def main(
     ctx: typer.Context,
     json: bool = typer.Option(False, "--json", help="以 JSON 格式输出结果"),
+    version: bool = typer.Option(False, "--version", help="显示版本号并退出"),
 ):
     """智能文件目录整理工具 — 按类型或日期一键整理杂乱目录。"""
     ctx.ensure_object(dict)
     ctx.obj["json"] = json
+    if version:
+        typer.echo(f"dirsort {__version__}")
+        raise typer.Exit()
 
 
 def entry():
@@ -431,7 +433,7 @@ def _print_dupes_result(
         console = Console()
         # 按重复文件数排序，显示前几组
         sorted_groups = sorted(groups, key=lambda g: len(g.files), reverse=True)
-        console.print(f"\n[bold red]🔁 发现 {total_dupes} 个重复文件（可节省 {_format_bytes(savable_bytes)}）[/]")
+        console.print(f"\n[bold red]🔁 发现 {total_dupes} 个重复文件（可节省 {format_bytes(savable_bytes)}）[/]")
 
         table = Table(box=box.ROUNDED)
         table.add_column("分组", style="dim")
@@ -456,14 +458,14 @@ def _print_dupes_result(
             console.print(f"[dim]…以及另外 {len(sorted_groups) - 15} 组[/]")
 
         console.print(table)
-        console.print(f"[dim]💡 使用 [bold]--delete[/] 标志删除重复文件（保留每组第一个）。[/]")
+        console.print("[dim]💡 使用 [bold]--delete[/] 标志删除重复文件（保留每组第一个）。[/]")
     else:
-        typer.echo(f"\n🔁 发现 {total_dupes} 个重复文件（可节省 {_format_bytes(savable_bytes)}）")
+        typer.echo(f"\n🔁 发现 {total_dupes} 个重复文件（可节省 {format_bytes(savable_bytes)}）")
         for i, g in enumerate(groups[:10], 1):
             typer.echo(f"  {i}. 哈希={g.file_hash[:8]}… ({len(g.files)} 个副本)")
             for f in g.files[:5]:
                 typer.echo(f"     📄 {f}")
-        typer.echo(f"\n💡 使用 --delete 标志删除重复文件。")
+        typer.echo("\n💡 使用 --delete 标志删除重复文件。")
 
 
 def _execute_dupes_delete(groups: list, ctx: typer.Context):
@@ -825,7 +827,7 @@ def stats(
     )
 
     if by_type:
-        _sort_stats_by_type(ctx, target, exclude, exclude_dir)
+        _sort_stats_by_type(ctx, target, exclude, exclude_dir, show_chart=chart)
     else:
         _sort_stats(ctx, categories, None, None)
 
@@ -873,6 +875,7 @@ def _sort_stats_by_type(
     target: Path,
     exclude: list[str] | None,
     exclude_dirs: list[str] | None,
+    show_chart: bool = False,
 ):
     """按扩展名分组统计。"""
     from collections import Counter
@@ -932,7 +935,7 @@ def _sort_stats_by_type(
         max_count = sorted_exts[0][1] if sorted_exts else 0
         for ext, count in sorted_exts[:30]:
             pct = f"{count / total * 100:.1f}%"
-            bar = _make_bar(count, max_count) if chart else ""
+            bar = _make_bar(count, max_count) if show_chart else ""
             label = f"{ext} {bar}" if bar else ext
             table.add_row(label, str(count), pct)
 
@@ -944,7 +947,7 @@ def _sort_stats_by_type(
     else:
         typer.echo(f"\n📊 按扩展名统计（共 {total} 个文件）：")
         for ext, count in sorted_exts[:20]:
-            bar = _make_bar(count, sorted_exts[0][1]) if chart else ""
+            bar = _make_bar(count, sorted_exts[0][1]) if show_chart else ""
             typer.echo(f"  {ext}: {count} {bar}")
 
 
@@ -958,7 +961,6 @@ def _make_bar(value: int, max_value: int, width: int = 20) -> str:
 
 def fnmatch_match(name: str, pattern: str) -> bool:
     """封装 fnmatch 匹配。"""
-    from fnmatch import fnmatch
     return fnmatch(name, pattern)
 
 
@@ -984,11 +986,6 @@ def _parse_size(size_str: str) -> int:
         return int(float(size_str[:-2]) * 1024 * 1024 * 1024)
     else:
         return int(float(size_str))
-
-
-def _format_bytes(b: int) -> str:
-    """将字节数格式化为可读字符串。"""
-    return format_bytes(b)
 
 
 def get_size_display(size: int) -> str:

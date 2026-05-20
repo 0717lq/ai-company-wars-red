@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dirsort"
-version = "0.4.0"
+version = "0.5.0"
 description = "智能文件目录整理 CLI 工具 — 一键解决杂乱目录的烦恼。支持按类型/日期分类、重复文件检测、批量重命名、Dry-run 预览、Undo 回滚、YAML 配置规则、JSON 输出。"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -33,7 +33,7 @@ classifiers = [
 dependencies = [
     "typer>=0.9.0",
 ]
-optional-dependencies = {dev = ["pytest>=7", "pytest-cov>=4", "pytest-asyncio>=0.21"], full = ["rich>=13.0.0", "pyyaml>=6.0"], tui = ["textual>=0.52"], all = ["dirsort[full,tui]"]}
+optional-dependencies = {dev = ["pytest>=7", "pytest-cov>=4", "pytest-asyncio>=0.21", "ruff>=0.3"], full = ["rich>=13.0.0", "pyyaml>=6.0"], tui = ["textual>=0.52"], all = ["dirsort[full,tui]"]}
 
 [project.urls]
 Homepage = "https://github.com/0717lq/ai-company-wars-red"
@@ -49,3 +49,28 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long — handled by formatter
+    "B008",  # function call in argument defaults — required by Typer
+    "B904",  # raise-within-try — allow bare raise in some cases
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

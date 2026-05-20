@@ -1,7 +1,8 @@
 """重复文件检测模块 — 通过内容哈希（MD5）检测重复文件。"""
 import hashlib
-from pathlib import Path
 from fnmatch import fnmatch
+from pathlib import Path
+
 from .utils import get_size_str
 
 # 分块读取大小（64KB）
@@ -121,7 +122,7 @@ def find_duplicates(
     # 只有 ≥2 个文件相同大小时才有可能重复
     hash_groups: dict[str, list[Path]] = {}
 
-    for size, files in size_groups.items():
+    for _size, files in size_groups.items():
         if len(files) < 2:
             continue  # 大小唯一，不可能是重复
         for f in files:

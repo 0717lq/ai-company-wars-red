@@ -1,9 +1,8 @@
 """配置文件系统 — 加载 YAML 格式的自定义分类规则。"""
-import os
 from pathlib import Path
 from typing import Any
 
-from .rules import DEFAULT_RULES, classify as default_classify
+from .rules import DEFAULT_RULES
 
 # 默认配置路径
 DEFAULT_CONFIG_DIR = Path.home() / ".config" / "dirsort"
@@ -62,7 +61,7 @@ def load_config(config_path: str | Path | None = None) -> dict[str, str] | None:
     try:
         import yaml
 
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             data: dict[str, Any] = yaml.safe_load(f)
 
         if not isinstance(data, dict) or "rules" not in data:

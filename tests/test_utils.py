@@ -2,7 +2,7 @@
 import tempfile
 from pathlib import Path
 
-from dirsort.utils import get_size_str, count_files, get_disk_usage
+from dirsort.utils import count_files, get_disk_usage, get_size_str
 
 
 class TestUtils:

@@ -1,5 +1,4 @@
 """测试 UndoManager 的边缘情况。"""
-import json
 import tempfile
 from pathlib import Path
 
