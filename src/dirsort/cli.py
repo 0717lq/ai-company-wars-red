@@ -15,8 +15,14 @@ from .config import (
 from .dupes import (
     find_duplicates,
 )
+from .plugin_system import PluginManager
 from .rename import build_rename_plan, execute_rename
 from .sorter import analyze, organize
+from .stats_enhanced import (
+    find_top_files,
+    render_pie_chart,
+    storage_summary,
+)
 from .tui_app import run_tui as _run_tui
 from .undo import UndoManager
 from .utils import format_bytes, format_json_output
@@ -44,6 +50,19 @@ except ImportError:
 def _is_json(ctx: typer.Context) -> bool:
     """检查是否启用了 JSON 输出模式。"""
     return ctx.obj and ctx.obj.get("json", False)
+
+
+def _build_metadata() -> dict:
+    """构建 JSON 输出的 metadata 字段（版本、插件、引擎）。"""
+    from . import __version__
+    mgr = PluginManager()
+    mgr.discover_and_load()
+    plugins = [{"name": p.name, "version": p.version} for p in mgr.list_plugins()]
+    return {
+        "version": __version__,
+        "engine": f"dirsort/{__version__}",
+        "plugins": plugins,
+    }
 
 
 # ── Typer 应用 ─────────────────────────────────────────────────
@@ -84,7 +103,7 @@ def entry():
     # 检查第一个参数是否是已知子命令
     known_commands = {
         "sort", "undo", "history", "init", "config",
-        "dupes", "rename", "stats", "tui",
+        "dupes", "rename", "stats", "tui", "plugin",
         "--help", "-h", "--install-completion",
         "--show-completion",
     }
@@ -186,6 +205,7 @@ def sort(
                 "path": str(target),
                 "status": "clean",
                 "message": "目录已经很整洁了，无需整理",
+                "metadata": _build_metadata(),
             }))
         elif HAS_RICH:
             Console().print("[bold green]✨ 目录已经很整洁了，无需整理！[/]")
@@ -212,6 +232,7 @@ def sort(
             "status": "dry_run" if is_dry_run else "executed",
             "total": total,
             "categories": plan_data,
+            "metadata": _build_metadata(),
         }))
         if is_dry_run:
             return
@@ -802,6 +823,12 @@ def stats(
     chart: bool = typer.Option(
         False, "--chart", help="显示条形图",
     ),
+    pie: bool = typer.Option(
+        False, "--pie", help="显示 ASCII 饼图（文件类型分布）",
+    ),
+    top: int = typer.Option(
+        0, "--top", "-t", help="显示大文件 Top-N 排行（如 --top 10）",
+    ),
     exclude: list[str] = typer.Option(
         [], "--exclude", "-x", help="排除匹配的文件",
     ),
@@ -825,6 +852,16 @@ def stats(
         exclude=list(exclude) if exclude else None,
         exclude_dirs=list(exclude_dir) if exclude_dir else None,
     )
+
+    # --top N: 显示大文件排行
+    if top > 0:
+        _stats_top_files(ctx, target, top, exclude, exclude_dir)
+        return
+
+    # --pie: 显示 ASCII 饼图
+    if pie:
+        _stats_pie_chart(ctx, target, categories, exclude, exclude_dir)
+        return
 
     if by_type:
         _sort_stats_by_type(ctx, target, exclude, exclude_dir, show_chart=chart)
@@ -951,6 +988,96 @@ def _sort_stats_by_type(
             typer.echo(f"  {ext}: {count} {bar}")
 
 
+def _stats_top_files(
+    ctx: typer.Context,
+    target: Path,
+    top_n: int,
+    exclude: list[str],
+    exclude_dirs: list[str],
+):
+    """显示大文件 Top-N 排行。"""
+    top_files = find_top_files(
+        target,
+        top_n=top_n,
+        exclude=list(exclude) if exclude else None,
+        exclude_dirs=list(exclude_dirs) if exclude_dirs else None,
+    )
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "stats_top",
+            "path": str(target),
+            "top_n": top_n,
+            "files": top_files,
+        }))
+        return
+
+    if not top_files:
+        typer.echo("ℹ️  没有找到文件。")
+        return
+
+    if HAS_RICH:
+        console = Console()
+        table = Table(
+            title=f"📊 大文件 Top-{top_n}",
+            box=box.ROUNDED,
+        )
+        table.add_column("#", style="dim", justify="right")
+        table.add_column("大小", style="green", justify="right")
+        table.add_column("扩展名", style="cyan")
+        table.add_column("文件名", style="white")
+
+        for i, f in enumerate(top_files, 1):
+            table.add_row(
+                str(i),
+                format_bytes(f["size"]),
+                f["ext"],
+                f["name"][:50],
+            )
+        console.print(table)
+    else:
+        typer.echo(f"\n📊 大文件 Top-{top_n}：")
+        for i, f in enumerate(top_files, 1):
+            typer.echo(f"  {i}. {format_bytes(f['size']):>10}  {f['name']}")
+
+
+def _stats_pie_chart(
+    ctx: typer.Context,
+    target: Path,
+    categories: dict,
+    exclude: list[str],
+    exclude_dirs: list[str],
+):
+    """显示文件类型分布 ASCII 饼图。"""
+    # 用分类数据构建饼图
+    data = {
+        cat: len(files)
+        for cat, files in sorted(categories.items())
+        if files
+    }
+
+    if _is_json(ctx):
+        summary = storage_summary(
+            target,
+            exclude=list(exclude) if exclude else None,
+            exclude_dirs=list(exclude_dirs) if exclude_dirs else None,
+        )
+        typer.echo(format_json_output({
+            "operation": "stats_pie",
+            "path": str(target),
+            "categories": data,
+            "summary": summary,
+        }))
+        return
+
+    if not data:
+        typer.echo("ℹ️  没有找到文件。")
+        return
+
+    pie_output = render_pie_chart(data, title=f"📊 {target.name} 文件类型分布")
+    typer.echo(pie_output)
+
+
 def _make_bar(value: int, max_value: int, width: int = 20) -> str:
     """生成 ASCII 条形图。"""
     if max_value == 0:
@@ -1057,3 +1184,190 @@ def tui(
         raise typer.Exit(1)
 
     _run_tui(target)
+
+
+# ══════════════════════════════════════════════════════════════
+#  子命令组：plugin（插件管理）
+# ══════════════════════════════════════════════════════════════
+
+plugin_app = typer.Typer(
+    name="plugin",
+    help="插件管理 — 列出、安装、创建和查看插件信息。",
+    no_args_is_help=True,
+)
+app.add_typer(plugin_app, name="plugin")
+
+
+@plugin_app.command("list")
+def plugin_list(
+    ctx: typer.Context,
+):
+    """列出已安装的插件。"""
+    mgr = PluginManager()
+    mgr.discover_and_load()
+    plugins = mgr.list_plugins()
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "plugin_list",
+            "plugins": [
+                {
+                    "name": p.name,
+                    "version": p.version,
+                    "description": p.description,
+                }
+                for p in plugins
+            ],
+            "count": len(plugins),
+        }))
+        return
+
+    if not plugins:
+        if HAS_RICH:
+            Console().print("[yellow]📭 没有已安装的插件。[/]")
+            Console().print(
+                "[dim]使用 [bold]dirsort plugin create <name>[/] 创建新插件[/]"
+            )
+        else:
+            typer.echo("📭 没有已安装的插件。")
+            typer.echo("使用 'dirsort plugin create <name>' 创建新插件。")
+        return
+
+    if HAS_RICH:
+        console = Console()
+        table = Table(title="🔌 已安装插件", box=box.ROUNDED)
+        table.add_column("名称", style="cyan")
+        table.add_column("版本", style="green")
+        table.add_column("描述", style="white")
+        for p in plugins:
+            table.add_row(p.name, p.version, p.description)
+        console.print(table)
+    else:
+        typer.echo("🔌 已安装插件：")
+        for p in plugins:
+            typer.echo(f"  • {p.name} v{p.version} — {p.description}")
+
+
+@plugin_app.command("install")
+def plugin_install(
+    ctx: typer.Context,
+    path: str = typer.Argument(..., help="插件 .py 文件路径"),
+):
+    """安装自定义 Python 插件。"""
+    source = Path(path)
+    mgr = PluginManager()
+
+    try:
+        plugin = mgr.install_plugin(source)
+    except FileNotFoundError as e:
+        typer.echo(f"❌ {e}")
+        raise typer.Exit(1)
+    except ValueError as e:
+        typer.echo(f"❌ {e}")
+        raise typer.Exit(1)
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "plugin_install",
+            "status": "success",
+            "plugin": {
+                "name": plugin.name,
+                "version": plugin.version,
+                "description": plugin.description,
+            },
+        }))
+        return
+
+    if HAS_RICH:
+        Console().print(f"[bold green]✅ 已安装插件:[/] {plugin.name} v{plugin.version}")
+        Console().print(f"[dim]{plugin.description}[/]")
+    else:
+        typer.echo(f"✅ 已安装插件: {plugin.name} v{plugin.version}")
+        typer.echo(plugin.description)
+
+
+@plugin_app.command("create")
+def plugin_create(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="插件名称（如 my-classifier）"),
+    output: str = typer.Option(
+        None, "--output", "-o", help="输出文件路径（默认: <name>.py）",
+    ),
+):
+    """生成插件模板脚手架。"""
+    mgr = PluginManager()
+    template = mgr.create_plugin_template(name)
+
+    out_path = Path(output) if output else Path(f"{name}.py")
+    out_path.write_text(template, encoding="utf-8")
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "plugin_create",
+            "name": name,
+            "output": str(out_path),
+            "status": "created",
+        }))
+        return
+
+    if HAS_RICH:
+        Console().print(f"[bold green]✅ 插件模板已创建:[/] {out_path}")
+        Console().print("[dim]编辑此文件实现自定义分类逻辑，然后用 dirsort plugin install 安装。[/]")
+    else:
+        typer.echo(f"✅ 插件模板已创建: {out_path}")
+        typer.echo("编辑此文件实现自定义分类逻辑，然后用 'dirsort plugin install' 安装。")
+
+
+@plugin_app.command("info")
+def plugin_info(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="插件名称"),
+):
+    """显示插件详情。"""
+    mgr = PluginManager()
+    mgr.discover_and_load()
+    info = mgr.get_plugin_info(name)
+
+    if info is None:
+        typer.echo(f"❌ 未找到插件: {name}")
+        raise typer.Exit(1)
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "plugin_info",
+            "plugin": info,
+        }))
+        return
+
+    if HAS_RICH:
+        console = Console()
+        console.print(f"[bold cyan]🔌 {info['name']}[/] v{info['version']}")
+        console.print(f"  描述: {info['description']}")
+        console.print(f"  classify hook: {'✅' if info['has_classify'] else '❌'}")
+        console.print(f"  report hook: {'✅' if info['has_report'] else '❌'}")
+    else:
+        typer.echo(f"🔌 {info['name']} v{info['version']}")
+        typer.echo(f"  描述: {info['description']}")
+        typer.echo(f"  classify hook: {'有' if info['has_classify'] else '无'}")
+        typer.echo(f"  report hook: {'有' if info['has_report'] else '无'}")
+
+
+@plugin_app.command("reload")
+def plugin_reload(
+    ctx: typer.Context,
+):
+    """重新加载所有插件（热重载）。"""
+    mgr = PluginManager()
+    count = mgr.reload()
+
+    if _is_json(ctx):
+        typer.echo(format_json_output({
+            "operation": "plugin_reload",
+            "reloaded": count,
+        }))
+        return
+
+    if HAS_RICH:
+        Console().print(f"[bold green]🔄 已重新加载 {count} 个插件。[/]")
+    else:
+        typer.echo(f"🔄 已重新加载 {count} 个插件。")

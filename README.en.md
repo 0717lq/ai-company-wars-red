@@ -20,9 +20,33 @@
 
 ---
 
-## 🎉 What's New in v0.4.0 — "TUI + Agent-Ready"
+## 🎉 What's New
 
-> The biggest dirsort update yet! 🚀
+### v0.6.0 — "Extensible Platform" 🔌 *(2026-05-30)*
+
+> From "fixed tool" to "extensible platform" — plugins let you customize everything with Python.
+
+| Feature | Description | How to Use |
+|---------|-------------|------------|
+| 🔌 **Plugin System** | Python plugins for custom classification & reports | `dirsort plugin list/install/create/info` |
+| 📊 **ASCII Charts** | Pie/bar charts for file type distribution | `dirsort stats --pie --chart` |
+| 📁 **Top-N Large Files** | Find the biggest space hogs | `dirsort stats --top 10` |
+| 📋 **JSON Metadata** | `--json` includes version/plugins/engine info | `dirsort sort --json .` |
+
+### v0.5.0 — "Code Quality" 🛡️ *(2026-05-20)*
+
+> From "works" to "reliable" — stricter linting, stronger tests, fewer bugs.
+
+| Improvement | Description | User Value |
+|-------------|-------------|------------|
+| 🔧 **Ruff Strict Lint** | flake8-bugbear, pyupgrade, pep8-naming | Fewer potential bugs |
+| 📐 **EditorConfig** | Cross-editor coding style consistency | Zero-friction teamwork |
+| 🧪 **Test Suite Hardening** | Fixed all test compat issues, unified naming | More confident releases |
+| 🐛 **Bug Fixes** | CLI/TUI/Config/Dupes multiple fixes | More stable experience |
+
+### v0.4.0 — "TUI + Agent-Ready" 🚀 *(2026-05-19)*
+
+> The biggest dirsort update yet!
 
 | Feature | Description | How to Use |
 |---------|-------------|------------|
@@ -145,7 +169,7 @@ pip install -e ".[full,dev]"   # Dev mode with all deps
 
 ## 🎮 Usage Guide
 
-### 🖥️ Interactive TUI (NEW! v0.4.0)
+### 🖥️ Interactive TUI (v0.4.0+)
 
 ```bash
 # Launch the terminal UI (requires dirsort[tui])
@@ -311,9 +335,11 @@ dirsort tui --help
 
 | Feature | Description |
 |---------|-------------|
+| ✅ **Plugin System** | `dirsort plugin` — Python plugins for custom classification/reports |
+| ✅ **ASCII Charts** | Pie/bar charts, Top-N large files |
 | ✅ **Interactive TUI** | `dirsort tui` — Textual terminal UI with 4 panels |
 | ✅ **AI Agent Skill** | `.claude/skills/dirsort.md` — ready for Claude Code / Codex |
-| ✅ **JSON Output** | `--json` on every command, AI-parsable |
+| ✅ **JSON Output** | `--json` on every command with metadata (version/plugins/engine) |
 | ✅ **Safe by Default** | Dry-run by default, `--execute` to act |
 | ✅ **Sort by Type** | Images, docs, videos, audio, code, archives, 10+ categories |
 | ✅ **Sort by Date** | Auto-group into `2026-05/` month dirs by modification date |
@@ -323,7 +349,7 @@ dirsort tui --help
 | ✅ **Rich Output** | Colored tables, emojis. Degrades gracefully without Rich |
 | ✅ **Auto Conflict Handling** | Auto-number suffix for filename conflicts |
 | ✅ **Undo Rollback** | Reversible sort/rename/dupes operations |
-| ✅ **Stats Mode** | By type/extension, `--chart` bar chart |
+| ✅ **Stats Mode** | By type/extension, ASCII pie/bar charts, large file Top-N |
 | ✅ **Config File System** | `--config` + auto-load `~/.config/dirsort/rules.yaml` |
 | ✅ **Shell Completions** | `--install-completion` for bash/zsh/fish |
 | ✅ **Docker Image** | `python:3.11-slim` multi-stage build |
@@ -333,25 +359,27 @@ dirsort tui --help
 
 ## 📊 Comparison
 
-| Feature | **dirsort v0.4.0** 🏆 | organize-cli | fclean (Blue) |
+| Feature | **dirsort v0.6.0** 🏆 | organize-cli | fclean (Blue) |
 |---------|----------------------|-------------|--------------|
+| Plugin System | ✅ **Exclusive** | ❌ | ❌ |
+| ASCII Charts | ✅ **Exclusive** | ❌ | ❌ |
 | Interactive TUI | ✅ **Exclusive** | ❌ | ❌ |
 | AI Agent Skill | ✅ **Exclusive** | ❌ | ❌ |
-| JSON Output | ✅ **Exclusive** | ❌ | ❌ |
+| JSON Output + Metadata | ✅ **Exclusive** | ❌ | ✅ |
 | Safe Default (dry-run) | ✅ **Default** | ❌ | ✅ |
 | Undo Rollback | ✅ | ❌ | ✅ |
 | Sort by Date | ✅ | ❌ | ✅ |
 | File Exclusions | ✅ | ✅ | ✅ |
-| Duplicate Detection | ✅ **Exclusive** | ❌ | ❌ |
-| Batch Rename | ✅ **Exclusive** | ❌ | ✅ (v0.3.0) |
+| Duplicate Detection | ✅ **Exclusive** | ❌ | ✅ |
+| Batch Rename | ✅ **Exclusive** | ❌ | ✅ |
 | Shell Completions | ✅ **Exclusive** | ❌ | ❌ |
 | Config File System | ✅ **Exclusive** | ❌ | ✅ |
-| Docker Image | ✅ **Exclusive** | ❌ | ❌ |
-| Pre-commit Hook | ✅ **Exclusive** | ❌ | ❌ |
+| Docker Image | ✅ | ❌ | ✅ |
+| Pre-commit Hook | ✅ | ❌ | ✅ |
 | Rich Output | ✅ | ❌ | ✅ |
 | Install | `pip install dirsort` | Requires config setup | `pip install fclean` |
 
-**Why dirsort?** Interactive TUI, AI Agent Skill, JSON output, duplicate detection, batch rename, Docker image — leading across the board.
+**Why dirsort?** Plugin system, ASCII charts, TUI, Agent Skill, JSON metadata, duplicate detection, batch rename, Docker — leading across the board.
 
 ---
 
@@ -400,6 +428,45 @@ docker run --rm -v $(pwd):/data dirsort sort /data
 
 ---
 
+## 🔌 Plugin System (NEW in v0.6.0)
+
+dirsort supports Python plugins to extend file classification and report generation:
+
+```bash
+# Create a plugin template
+dirsort plugin create my-classifier
+
+# Edit my-classifier.py with your custom logic
+# Install the plugin
+dirsort plugin install my-classifier.py
+
+# List installed plugins
+dirsort plugin list
+
+# View plugin details
+dirsort plugin info my-classifier
+
+# Hot reload (after modifying plugin files)
+dirsort plugin reload
+```
+
+**Example plugin (classify by file size):**
+
+```python
+from dirsort.plugin_base import PluginBase
+
+class SizeClassifier(PluginBase):
+    name = "size-classifier"
+    version = "1.0.0"
+    description = "Classify files by size"
+
+    def classify(self, file_path):
+        size = file_path.stat().st_size
+        if size > 100 * 1024 * 1024:
+            return "Large Files"
+        return None
+```
+
 ## 🔧 Pre-commit Hook
 
 Add dirsort checks to your project (auto-detect unsorted temp files before commits):
@@ -408,7 +475,7 @@ Add dirsort checks to your project (auto-detect unsorted temp files before commi
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/0717lq/ai-company-wars-red
-    rev: v0.4.0
+    rev: v0.6.0
     hooks:
       - id: dirsort-check
 ```
@@ -446,8 +513,9 @@ All contributions are welcome!
 git clone https://github.com/0717lq/ai-company-wars-red.git
 cd ai-company-wars-red
 pip install -e ".[full,dev]"
-pytest              # Run tests (138 passing)
+pytest              # Run tests (207 passing)
 pytest --cov=src    # Coverage report
+ruff check .        # Code style check (v0.5.0+)
 ```
 
 All PRs run CI tests automatically (Python 3.10 / 3.11 / 3.12).

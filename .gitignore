@@ -22,3 +22,6 @@ coverage/
 
 # dirsort history (user-specific)
 .dirsort/
+
+# Stray artifacts
+teams/

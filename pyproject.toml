@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dirsort"
-version = "0.5.0"
+version = "0.6.0"
 description = "智能文件目录整理 CLI 工具 — 一键解决杂乱目录的烦恼。支持按类型/日期分类、重复文件检测、批量重命名、Dry-run 预览、Undo 回滚、YAML 配置规则、JSON 输出。"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,6 +16,8 @@ keywords = [
     "tui", "textual", "terminal-ui",
     "duplicate-files", "batch-rename",
     "docker", "ai-agent", "developer-tools",
+    "code-quality", "ruff", "editorconfig",
+    "plugin", "extensible", "stats", "chart",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

@@ -20,9 +20,34 @@
 
 ---
 
-## 🎉 What's New in v0.4.0 — "TUI + Agent-Ready"
+## 🎉 What's New
 
-> 这是 dirsort 最大的一次更新！🚀
+### v0.6.0 — "Extensible Platform" 🔌 *(2026-05-30)*
+
+> 从"固定工具"升级为"可扩展平台" — 插件系统让你用 Python 扩展 dirsort 的一切。
+
+| 新功能 | 说明 | 操作 |
+|--------|------|------|
+| 🔌 **插件系统** | Python 插件扩展分类逻辑和报告格式 | `dirsort plugin list/install/create/info` |
+| 📊 **ASCII 图表** | 饼图/柱状图可视化文件类型分布 | `dirsort stats --pie --chart` |
+| 📁 **大文件 Top-N** | 找出占用空间最多的文件 | `dirsort stats --top 10` |
+| 📋 **JSON 元数据** | `--json` 输出包含版本/插件/引擎信息 | `dirsort sort --json .` |
+
+### v0.5.0 — "代码质量加固" 🛡️ *(2026-05-20)*
+
+> 从"能用"到"靠谱"的蜕变 — 更严格的代码规范、更强的测试体系、更少 Bug。
+
+| 改进项 | 说明 | 对用户的价值 |
+|--------|------|-------------|
+| 🔧 **Ruff 严格 Lint** | 启用 flake8-bugbear、pyupgrade、pep8-naming | 更少的潜在 Bug，代码更健壮 |
+| 📐 **EditorConfig** | 跨编辑器编码风格统一 | 团队协作零摩擦 |
+| 🧪 **测试体系增强** | 修复所有测试兼容性问题，统一命名规范 | 每次发布更放心 |
+| 🐛 **Bug 修复** | CLI/TUI/Config/Dupes 多个问题修复 | 更稳定的使用体验 |
+| 🧹 **项目清理** | 移除 stray 文件，代码库更干净 | 开发体验提升 |
+
+### v0.4.0 — "TUI + Agent-Ready" 🚀
+
+> 这是 dirsort 最大的一次功能更新！
 
 | 新功能 | 说明 | 操作 |
 |--------|------|------|
@@ -320,7 +345,8 @@ dirsort tui --help
 | ✅ **Rich 美化输出** | 彩色表格、emoji。无 Rich 降级纯文本 |
 | ✅ **自动冲突处理** | 同名文件自动加编号后缀 |
 | ✅ **Undo 回滚** | 支持 sort/rename/dupes 三种操作回滚 |
-| ✅ **统计模式** | 按类型/扩展名，支持 --chart 条形图 |
+| ✅ **插件系统** | `dirsort plugin` — Python 插件扩展分类/报告 |
+| ✅ **统计模式** | 按类型/扩展名，ASCII 饼图/柱状图，大文件 Top-N |
 | ✅ **配置文件系统** | `--config` + `~/.config/dirsort/rules.yaml` 自动加载 |
 | ✅ **Shell 补全** | `--install-completion` bash/zsh/fish |
 | ✅ **Docker 镜像** | `python:3.11-slim` 多阶段构建 |
@@ -330,8 +356,10 @@ dirsort tui --help
 
 ## 📊 对比同类工具
 
-| 特性 | **dirsort v0.4.0** 🏆 | organize-cli | fclean (蓝队) |
+| 特性 | **dirsort v0.6.0** 🏆 | organize-cli | fclean (蓝队) |
 |------|----------------------|-------------|--------------|
+| 插件系统 | ✅ **独家** | ❌ | ❌ |
+| ASCII 图表 | ✅ **独家** | ❌ | ❌ |
 | 交互式 TUI | ✅ **独家** | ❌ | ❌ |
 | AI Agent Skill | ✅ **独家** | ❌ | ❌ |
 | JSON 输出 | ✅ **独家** | ❌ | ❌ |
@@ -349,7 +377,7 @@ dirsort tui --help
 | 中文界面 | ✅ | ❌ | ❌ |
 | 安装 | `pip install dirsort` | 需要配置规则文件 | `pip install fclean` |
 
-**dirsort 的差异化优势：** 交互式 TUI、AI Agent Skill、JSON 输出、重复检测、批量重命名、Docker 镜像 — 全面领先。
+**dirsort 的差异化优势：** 插件系统、ASCII 图表、交互式 TUI、AI Agent Skill、JSON 输出、重复检测、批量重命名、Docker 镜像 — 全面领先。
 
 ---
 
@@ -398,6 +426,45 @@ docker run --rm -v $(pwd):/data dirsort sort /data
 
 ---
 
+## 🔌 插件系统（v0.6.0 新增）
+
+dirsort 支持 Python 插件扩展，让你自定义文件分类逻辑和报告格式：
+
+```bash
+# 创建插件模板
+dirsort plugin create my-classifier
+
+# 编辑 my-classifier.py 实现自定义逻辑
+# 安装插件
+dirsort plugin install my-classifier.py
+
+# 查看已安装插件
+dirsort plugin list
+
+# 查看插件详情
+dirsort plugin info my-classifier
+
+# 热重载（修改插件后无需重启）
+dirsort plugin reload
+```
+
+**插件示例（按文件大小分类）：**
+
+```python
+from dirsort.plugin_base import PluginBase
+
+class SizeClassifier(PluginBase):
+    name = "size-classifier"
+    version = "1.0.0"
+    description = "按文件大小分类"
+
+    def classify(self, file_path):
+        size = file_path.stat().st_size
+        if size > 100 * 1024 * 1024:
+            return "大文件"
+        return None
+```
+
 ## 🔧 Pre-commit Hook
 
 在项目中启用 dirsort 检查（Git commit 前自动检测未整理的临时文件）：
@@ -406,7 +473,7 @@ docker run --rm -v $(pwd):/data dirsort sort /data
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/0717lq/ai-company-wars-red
-    rev: v0.4.0
+    rev: v0.6.0
     hooks:
       - id: dirsort-check
 ```
@@ -444,8 +511,9 @@ rules:
 git clone https://github.com/0717lq/ai-company-wars-red.git
 cd ai-company-wars-red
 pip install -e ".[full,dev]"
-pytest              # 运行测试（138 个测试全通过）
+pytest              # 运行测试（207 个测试全通过）
 pytest --cov=src    # 测试覆盖率
+ruff check .        # 代码风格检查（v0.5.0 新增）
 ```
 
 所有 PR 自动运行 CI 测试（Python 3.10 / 3.11 / 3.12）。
